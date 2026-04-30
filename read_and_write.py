@@ -1,4 +1,5 @@
 # %%
+import configparser
 import sys
 from pathlib import Path
 
@@ -154,18 +155,26 @@ def make_lhm_coupling(
 
 # %%
 if __name__ == "__main__":
+    # Read settings from ini file
+    inifile = sys.argv[1]
 
-    # notes: M/D/Y and convert to list of datetime.
-    times = pd.date_range(start="1/1/2011", end="1/7/2011", freq="D").tolist()
+    config = configparser.ConfigParser(allow_unnamed_section=True)
+    config.read(inifile)
+
+    section = configparser.UNNAMED_SECTION
+    prj_path = Path(config.get(section, "PRJFILE_IN"))
+    msw_dbase = Path(config.get(section, "MSW_DBASE"))
+    out_dir = Path(config.get(section, "OUTPUT_FOLDER"))
+    bin_dir = Path(config.get(section, "COUPLER_DIR"))
+    start_date = config.get(section, "SDATE")
+    end_date = config.get(section, "EDATE")
+    interval = config.get(section, "INTERVAL")
+
+    # Generate list of times for simulation
+    times = pd.date_range(start=start_date, end=end_date, freq=interval).tolist()
 
     #Path management
-    wdir = Path(r"c:\Users\engelen\projects_wdir\imod-python\imod5_converter\NHI_sprint")
-
-    msw_dbase = wdir / "dummy_path"
-    prj_path = wdir / "BASIS7" / "IBR30_BASIS7_TA-25x25-adapted.PRJ"
-    out_dir = wdir / "conversion_output"
     logfile_path = out_dir / "conversion_log.txt"
-    bin_dir = wdir / "bin"
 
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(logfile_path, "w") as sys.stdout:
