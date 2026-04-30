@@ -2,7 +2,9 @@
 import configparser
 import sys
 from pathlib import Path
+from typing import Optional
 
+import xarray as xr
 import imod
 from imod.formats.prj.prj import open_projectfile_data
 from imod.logging.config import LoggerType
@@ -14,13 +16,31 @@ import pandas as pd
 from primod import MetaMod, MetaModDriverCoupling
 
 
+def create_target_grid(
+        window: Optional[str], 
+        cellsize: Optional[float]
+    ) -> Optional[xr.DataArray]:
+
+    if window is None and cellsize is None:
+        return None
+    elif window is None or cellsize is None:
+        raise ValueError("Both window and cellsize must be provided to create target grid.")
+
+    window_tuple = tuple(map(float, window.split(",")))
+    xmin, ymin, xmax, ymax = window_tuple
+
+    return imod.util.empty_2d(
+        dx=cellsize, xmin=xmin, xmax=xmax, dy=-cellsize, ymin=ymin, ymax=ymax
+    )
+
 def convert_imod5_to_mf6_sim(
-    imod5_data: dict, period_data: dict, times: list
+    imod5_data: dict, period_data: dict, times: list[pd.Timestamp], target_grid: Optional[xr.DataArray]
 ) -> Modflow6Simulation:
     simulation = Modflow6Simulation.from_imod5_data(
         imod5_data,
         period_data,
         times,
+        target_grid=target_grid,
     )
     # Loosen validation settings
     simulation.set_validation_settings(imod.mf6.ValidationSettings(
@@ -110,7 +130,7 @@ def convert_imod5_to_msw_model(
 
 
 def import_lhm_mf6_and_msw(
-    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp]
+    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp], target_grid: xr.DataArray
 ) -> tuple[Modflow6Simulation, imod.msw.MetaSwapModel]:
     """
     Convert iMOD5 LHM model to MODFLOW 6 using imod-python
@@ -120,7 +140,9 @@ def import_lhm_mf6_and_msw(
     imod5_data, period_data = open_projectfile_data(prjfile_path)
 
     # Convert to MODFLOW 6 simulation and cleanup
-    mf6_simulation = convert_imod5_to_mf6_sim(imod5_data, period_data, times)
+    mf6_simulation = convert_imod5_to_mf6_sim(
+        imod5_data, period_data, times, target_grid=target_grid
+    )
     cleanup_mf6_sim(mf6_simulation)
 
     # Convert to MetaSwap model
@@ -132,13 +154,13 @@ def import_lhm_mf6_and_msw(
 
 
 def make_lhm_coupling(
-    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp]
+    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp], target_grid: xr.DataArray
 ) -> MetaMod:
     """
     Test coupling of LHM MODFLOW 6 and MetaSwap models
     """
     mf6_simulation, msw_model = import_lhm_mf6_and_msw(
-        prjfile_path, msw_dbase, times
+        prjfile_path, msw_dbase, times, target_grid=target_grid
     )
 
     driver_coupling = MetaModDriverCoupling(
@@ -168,7 +190,9 @@ if __name__ == "__main__":
     bin_dir = Path(config.get(section, "COUPLER_DIR"))
     start_date = config.get(section, "SDATE")
     end_date = config.get(section, "EDATE")
-    interval = config.get(section, "INTERVAL")
+    interval = config.get(section, "INTERVAL", fallback="D")
+    cellsize = config.getfloat(section, "CELLSIZE", fallback=None)
+    bbox = config.get(section, "WINDOW", fallback=None)
 
     # Generate list of times for simulation
     times = pd.date_range(start=start_date, end=end_date, freq=interval).tolist()
@@ -184,8 +208,8 @@ if __name__ == "__main__":
             add_default_file_handler=False,
             add_default_stream_handler=True,
         )
-
-        coupling = make_lhm_coupling(prj_path, msw_dbase, times)
+        target_grid = create_target_grid(bbox, cellsize)
+        coupling = make_lhm_coupling(prj_path, msw_dbase, times, target_grid=target_grid)
         coupling.write(
             out_dir,
             modflow6_dll=bin_dir/"msw.dll",
