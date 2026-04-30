@@ -1,0 +1,4 @@
+{
+    "python.useEnvironmentsExtension": false,
+    "debugpy.debugJustMyCode": false
+}

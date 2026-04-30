@@ -1,0 +1,35 @@
+[workspace]
+authors = ["JoerivanEngelen <joerivanengelen@hotmail.com>"]
+channels = ["conda-forge"]
+name = "LHM_user_acceptance_clipped"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+bottleneck = "*"
+geopandas = ">=1.0.0"
+netCDF4 = "*"
+loguru = "*"
+numpy = ">=2.0"
+pydantic = ">=2.11.0"
+python = ">=3.10"
+xarray = ">=2025.8.0"
+scipy = "*"
+tomli = "*"
+tomli-w = "*"
+xmipy = "*"
+ribasim = "=2025.6.0"
+plum-dispatch = "*"
+xugrid = "*"
+rasterio = ">=1.5.0,<2"
+rioxarray = ">=0.22.0,<0.23"
+ipykernel = ">=7.2.0,<8"
+jupyter = ">=1.1.1,<2"
+
+[pypi-dependencies]
+imod_coupler = { path = "c:/src/imod_coupler", editable = true }
+primod = { path = "c:/src/imod_coupler/pre-processing", editable = true }
+imod  = { path = "c:/src/imod-python", editable = true }
+# imod  = { git = "https://github.com/Deltares/imod-python.git" }
