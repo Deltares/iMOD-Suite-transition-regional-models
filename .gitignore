@@ -3,3 +3,5 @@
 !.pixi/config.toml
 # scratch scripts
 _scratch/*
+# profiling files
+*.prof
