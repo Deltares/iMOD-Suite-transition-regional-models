@@ -3,6 +3,7 @@ import configparser
 import sys
 from pathlib import Path
 from typing import Optional
+from dataclasses import dataclass
 
 import xarray as xr
 import imod
@@ -15,11 +16,46 @@ from imod.mf6.simulation import Modflow6Simulation
 import pandas as pd
 from primod import MetaMod, MetaModDriverCoupling
 
+@dataclass
+class Settings:
+    prjfile_path: Path
+    msw_dbase: Path
+    out_dir: Path
+    bin_dir: Path
+    start_date: str
+    end_date: str
+    interval: str
+    cellsize: Optional[float]
+    bbox: Optional[str]
+    model_name: str
+
+
+def read_settings(inifile: Path) -> Settings:
+    config = configparser.ConfigParser(allow_unnamed_section=True)
+    config.read(inifile)
+
+    section = configparser.UNNAMED_SECTION
+    return Settings(
+        prjfile_path=Path(config.get(section, "PRJFILE_IN")),
+        msw_dbase=Path(config.get(section, "MSW_DBASE")),
+        out_dir=Path(config.get(section, "OUTPUT_FOLDER")),
+        bin_dir=Path(config.get(section, "COUPLER_DIR")),
+        start_date=config.get(section, "SDATE"),
+        end_date=config.get(section, "EDATE"),
+        interval=config.get(section, "INTERVAL", fallback="D"),
+        cellsize=config.getfloat(section, "CELLSIZE", fallback=None),
+        bbox=config.get(section, "WINDOW", fallback=None),
+        model_name=config.get(section, "MODELNAME", fallback="imported"),
+    )
+
 
 def create_target_grid(
         window: Optional[str], 
         cellsize: Optional[float]
     ) -> Optional[xr.DataArray]:
+    """
+    Create target grid for MODFLOW 6 simulation based on provided window and cellsize.
+    """
 
     if window is None and cellsize is None:
         return None
@@ -34,13 +70,17 @@ def create_target_grid(
     )
 
 def convert_imod5_to_mf6_sim(
-    imod5_data: dict, period_data: dict, times: list[pd.Timestamp], target_grid: Optional[xr.DataArray]
+    imod5_data: dict, period_data: dict, times: list[pd.Timestamp], target_grid: Optional[xr.DataArray], model_name: str
 ) -> Modflow6Simulation:
+    """
+    Convert iMOD5 data to a MODFLOW 6 simulation object.
+    """
     simulation = Modflow6Simulation.from_imod5_data(
         imod5_data,
         period_data,
         times,
         target_grid=target_grid,
+        name=model_name,
     )
     # Loosen validation settings
     simulation.set_validation_settings(imod.mf6.ValidationSettings(
@@ -48,12 +88,13 @@ def convert_imod5_to_mf6_sim(
         strict_hfb_validation=False, 
         strict_well_validation=False, 
         ))
+    name = f"{model_name}_model"
     # Set settings so that the simulation behaves like iMOD5
-    simulation["imported_model"]["oc"] = OutputControl(
+    simulation[name]["oc"] = OutputControl(
         save_head="last", save_budget="last"
     )
     solution = Solution(
-        modelnames=["imported_model"],
+        modelnames=[name],
         print_option="summary",
         outer_dvclose=0.001,
         outer_maximum=150,
@@ -66,16 +107,17 @@ def convert_imod5_to_mf6_sim(
     )
     simulation["ims"] = solution
 
-    simulation["imported_model"]["npf"]["xt3d_option"] = True
+    simulation[name]["npf"]["xt3d_option"] = True
 
     return simulation
 
 
-def cleanup_mf6_sim(simulation: Modflow6Simulation) -> None:
+def cleanup_mf6_sim(simulation: Modflow6Simulation, model_name: str) -> None:
     """
-    Cleanup the simulation of erronous package data
+    Cleanup the MODFLOW6 simulation of erronous package data
     """
-    model = simulation["imported_model"]
+    name = f"{model_name}_model"
+    model = simulation[name]
     for pkg in model.values():
         pkg.dataset.load()
 
@@ -113,8 +155,13 @@ def convert_imod5_to_msw_model(
     mf6_sim: Modflow6Simulation,
     times: list,
     msw_dbase: Path | str,
+    model_name: str,
 ) -> imod.msw.MetaSwapModel:
-    dis_pkg = mf6_sim["imported_model"]["dis"]
+    """
+    Convert iMOD5 data to a MetaSwap model.
+    """
+    name = f"{model_name}_model"
+    dis_pkg = mf6_sim[name]["dis"]
     msw_model = imod.msw.MetaSwapModel.from_imod5_data(imod5_data, dis_pkg, times)
     msw_model["oc"] = imod.msw.VariableOutputControl()
     msw_model.simulation_settings["unsa_svat_path"] = msw_dbase
@@ -129,8 +176,8 @@ def convert_imod5_to_msw_model(
     return msw_model
 
 
-def import_lhm_mf6_and_msw(
-    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp], target_grid: xr.DataArray
+def import_mf6_and_msw(
+    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
 ) -> tuple[Modflow6Simulation, imod.msw.MetaSwapModel]:
     """
     Convert iMOD5 LHM model to MODFLOW 6 using imod-python
@@ -141,30 +188,30 @@ def import_lhm_mf6_and_msw(
 
     # Convert to MODFLOW 6 simulation and cleanup
     mf6_simulation = convert_imod5_to_mf6_sim(
-        imod5_data, period_data, times, target_grid=target_grid
+        imod5_data, period_data, times, target_grid=target_grid, model_name=model_name,
     )
-    cleanup_mf6_sim(mf6_simulation)
+    cleanup_mf6_sim(mf6_simulation, model_name)
 
     # Convert to MetaSwap model
     msw_model = convert_imod5_to_msw_model(
-        imod5_data, mf6_simulation, times, msw_dbase
+        imod5_data, mf6_simulation, times, msw_dbase, model_name
     )
 
     return mf6_simulation, msw_model
 
 
-def make_lhm_coupling(
-    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp], target_grid: xr.DataArray
+def make_metamod_coupling(
+    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
 ) -> MetaMod:
     """
-    Test coupling of LHM MODFLOW 6 and MetaSwap models
+    Create Coupling of MODFLOW 6 and MetaSwap model
     """
-    mf6_simulation, msw_model = import_lhm_mf6_and_msw(
-        prjfile_path, msw_dbase, times, target_grid=target_grid
+    mf6_simulation, msw_model = import_mf6_and_msw(
+        prjfile_path, msw_dbase, times, target_grid=target_grid, model_name=model_name,
     )
-
+    name = f"{model_name}_model"
     driver_coupling = MetaModDriverCoupling(
-        mf6_model="imported_model",
+        mf6_model=name,
         mf6_recharge_package="msw-rch",
         mf6_wel_package="msw-sprinkling",
     )
@@ -180,26 +227,12 @@ if __name__ == "__main__":
     # Read settings from ini file
     inifile = sys.argv[1]
 
-    config = configparser.ConfigParser(allow_unnamed_section=True)
-    config.read(inifile)
+    settings = read_settings(inifile)
+    out_dir = settings.out_dir
+    bin_dir = settings.bin_dir
 
-    section = configparser.UNNAMED_SECTION
-    prj_path = Path(config.get(section, "PRJFILE_IN"))
-    msw_dbase = Path(config.get(section, "MSW_DBASE"))
-    out_dir = Path(config.get(section, "OUTPUT_FOLDER"))
-    bin_dir = Path(config.get(section, "COUPLER_DIR"))
-    start_date = config.get(section, "SDATE")
-    end_date = config.get(section, "EDATE")
-    interval = config.get(section, "INTERVAL", fallback="D")
-    cellsize = config.getfloat(section, "CELLSIZE", fallback=None)
-    bbox = config.get(section, "WINDOW", fallback=None)
-
-    # Generate list of times for simulation
-    times = pd.date_range(start=start_date, end=end_date, freq=interval).tolist()
-
-    #Path management
+    # Configure logging to file in output directory
     logfile_path = out_dir / "conversion_log.txt"
-
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(logfile_path, "w") as sys.stdout:
         imod.logging.configure(
@@ -208,11 +241,19 @@ if __name__ == "__main__":
             add_default_file_handler=False,
             add_default_stream_handler=True,
         )
-        target_grid = create_target_grid(bbox, cellsize)
-        coupling = make_lhm_coupling(prj_path, msw_dbase, times, target_grid=target_grid)
+
+        # Generate list of times for simulation
+        times = pd.date_range(start=settings.start_date, end=settings.end_date, freq=settings.interval).tolist()
+        # Create target grid
+        target_grid = create_target_grid(settings.bbox, settings.cellsize)
+        # Create coupling object
+        coupling = make_metamod_coupling(settings.prjfile_path, settings.msw_dbase, times, target_grid=target_grid, model_name=settings.model_name)
+        # Write coupling to disk
         coupling.write(
             out_dir,
             modflow6_dll=bin_dir/"msw.dll",
             metaswap_dll=bin_dir,
             metaswap_dll_dependency=bin_dir/"mf6.dll",
         )
+        # Run coupled simulation
+        # coupling.run()
