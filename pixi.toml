@@ -23,7 +23,6 @@ tomli-w = "*"
 xmipy = "*"
 ribasim = "=2025.6.0"
 plum-dispatch = "*"
-xugrid = "*"
 rasterio = ">=1.5.0,<2"
 rioxarray = ">=0.22.0,<0.23"
 ipykernel = ">=7.2.0,<8"
@@ -33,6 +32,7 @@ jupyter = ">=1.1.1,<2"
 snakeviz = "*"
 
 [pypi-dependencies]
+xugrid = { git = "https://github.com/Deltares/xugrid.git" }
 imod_coupler = { path = "c:/src/imod_coupler", editable = true }
 primod = { path = "c:/src/imod_coupler/pre-processing", editable = true }
 imod  = { path = "c:/src/imod-python", editable = true }
