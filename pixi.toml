@@ -6,6 +6,7 @@ platforms = ["win-64"]
 version = "0.1.0"
 
 [tasks]
+convert = {cmd = "python convert.py", description = "Convert iMOD5 data to MODFLOW 6 and MetaSwap model."}
 
 [dependencies]
 bottleneck = "*"
