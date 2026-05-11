@@ -1,5 +1,5 @@
 [workspace]
-authors = ["JoerivanEngelen <joerivanengelen@hotmail.com>"]
+authors = ["JoerivanEngelen <joeri.vanengelen@deltares.nl>"]
 channels = ["conda-forge"]
 name = "LHM_user_acceptance_clipped"
 platforms = ["win-64"]
@@ -33,10 +33,9 @@ snakeviz = "*"
 
 [pypi-dependencies]
 xugrid = { git = "https://github.com/Deltares/xugrid.git" }
-imod_coupler = { path = "c:/src/imod_coupler", editable = true }
-primod = { path = "c:/src/imod_coupler/pre-processing", editable = true }
-imod  = { path = "c:/src/imod-python", editable = true }
-# imod  = { git = "https://github.com/Deltares/imod-python.git" }
+imod_coupler = { git = "https://github.com/Deltares/imod_coupler.git" }
+primod ={ git = "https://github.com/Deltares/imod_coupler.git" , subdir = "pre-processing" }
+imod  = { git = "https://github.com/Deltares/imod-python.git" }
 
 [environments]
 default = { features = [], solve-group = "conda-deps" }
