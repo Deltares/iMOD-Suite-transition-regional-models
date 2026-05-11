@@ -34,7 +34,7 @@ snakeviz = "*"
 [pypi-dependencies]
 xugrid = { git = "https://github.com/Deltares/xugrid.git" }
 imod_coupler = { git = "https://github.com/Deltares/imod_coupler.git" }
-primod ={ git = "https://github.com/Deltares/imod_coupler.git" , subdir = "pre-processing" }
+primod ={ git = "https://github.com/Deltares/imod_coupler.git" , subdirectory = "pre-processing" }
 imod  = { git = "https://github.com/Deltares/imod-python.git" }
 
 [environments]

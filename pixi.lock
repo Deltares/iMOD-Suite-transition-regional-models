@@ -330,6 +330,9 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/81/47/dd9a212ef6e343a6857485ffe25bba537304f1913bdbed446a23f7f592e1/filelock-3.29.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d5/0c/043d5e551459da400957a1395e0febbf771446ff34291afcbe3d8be2a279/fsspec-2026.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b1/8b/88f16936a8e8070a83d36239555227ecd91728f9ef222c5382cda07e0fd6/h5netcdf-1.8.1-py3-none-any.whl
+      - pypi: git+https://github.com/Deltares/imod-python.git#0411c998f23ca2e0beb58b9a06bd2b91afd9f41c
+      - pypi: git+https://github.com/Deltares/imod_coupler.git#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
+      - pypi: git+https://github.com/Deltares/imod_coupler.git?subdirectory=pre-processing#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
       - pypi: https://files.pythonhosted.org/packages/be/f7/19e2a09c62809c9e63bbd14ce71fb92c6ff7b7b3045741bb00c781efc3c9/llvmlite-0.47.0-cp314-cp314-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/db/bc/83e112abc66cd466c6b83f99118035867cecd41802f8d044638aa78a106e/locket-1.0.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/56/46/3f7fc04fb853559e74b210e0b62c19974ec844cefec611f9e535f4da3761/numba-0.65.1-cp314-cp314-win_amd64.whl
@@ -340,9 +343,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fb/12/5911ae3eeec47800503a238d971e51722ccea5feb8569b735184d5fcdbc0/toolz-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl
       - pypi: git+https://github.com/Deltares/xugrid.git#b5e7d84d45c65d162f7eca6375267fca92ad570a
-      - pypi: C:/src/imod-python
-      - pypi: C:/src/imod_coupler
-      - pypi: C:/src/imod_coupler/pre-processing
   profile:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -674,6 +674,9 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/81/47/dd9a212ef6e343a6857485ffe25bba537304f1913bdbed446a23f7f592e1/filelock-3.29.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d5/0c/043d5e551459da400957a1395e0febbf771446ff34291afcbe3d8be2a279/fsspec-2026.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b1/8b/88f16936a8e8070a83d36239555227ecd91728f9ef222c5382cda07e0fd6/h5netcdf-1.8.1-py3-none-any.whl
+      - pypi: git+https://github.com/Deltares/imod-python.git#0411c998f23ca2e0beb58b9a06bd2b91afd9f41c
+      - pypi: git+https://github.com/Deltares/imod_coupler.git#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
+      - pypi: git+https://github.com/Deltares/imod_coupler.git?subdirectory=pre-processing#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
       - pypi: https://files.pythonhosted.org/packages/be/f7/19e2a09c62809c9e63bbd14ce71fb92c6ff7b7b3045741bb00c781efc3c9/llvmlite-0.47.0-cp314-cp314-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/db/bc/83e112abc66cd466c6b83f99118035867cecd41802f8d044638aa78a106e/locket-1.0.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/56/46/3f7fc04fb853559e74b210e0b62c19974ec844cefec611f9e535f4da3761/numba-0.65.1-cp314-cp314-win_amd64.whl
@@ -684,9 +687,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fb/12/5911ae3eeec47800503a238d971e51722ccea5feb8569b735184d5fcdbc0/toolz-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl
       - pypi: git+https://github.com/Deltares/xugrid.git#b5e7d84d45c65d162f7eca6375267fca92ad570a
-      - pypi: C:/src/imod-python
-      - pypi: C:/src/imod_coupler
-      - pypi: C:/src/imod_coupler/pre-processing
 packages:
 - conda: https://conda.anaconda.org/conda-forge/win-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -1989,10 +1989,9 @@ packages:
   - pkg:pypi/idna?source=hash-mapping
   size: 50721
   timestamp: 1760286526795
-- pypi: C:/src/imod-python
+- pypi: git+https://github.com/Deltares/imod-python.git#0411c998f23ca2e0beb58b9a06bd2b91afd9f41c
   name: imod
   version: 1.0.1.dev1
-  sha256: d27105972c53a243e6793668ecb915b0b24268a493441e035e214e01a8a8e389
   requires_dist:
   - affine
   - cftime>=1
@@ -2024,11 +2023,9 @@ packages:
   - shapely>=1.8 ; extra == 'all'
   - zarr ; extra == 'all'
   requires_python: '>=3.11'
-  editable: true
-- pypi: C:/src/imod_coupler
+- pypi: git+https://github.com/Deltares/imod_coupler.git#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
   name: imod-coupler
   version: 2024.3.0
-  sha256: 6122af2d8f5c2defef6e4ff958533e3df6c49a48d1801b2cdc70438e62a2c1d5
   requires_dist:
   - h5netcdf
   - loguru
@@ -2040,7 +2037,6 @@ packages:
   - tomli-w
   - xmipy
   requires_python: '>=3.10'
-  editable: true
 - conda: https://conda.anaconda.org/conda-forge/noarch/importlib-metadata-8.8.0-pyhcf101f3_0.conda
   sha256: 82ab2a0d91ca1e7e63ab6a4939356667ef683905dea631bc2121aa534d347b16
   md5: 080594bf4493e6bae2607e65390c520a
@@ -4238,10 +4234,9 @@ packages:
   - pytest-httpserver ; extra == 'test'
   - pytest-localftpserver ; extra == 'test'
   requires_python: '>=3.9'
-- pypi: C:/src/imod_coupler/pre-processing
+- pypi: git+https://github.com/Deltares/imod_coupler.git?subdirectory=pre-processing#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
   name: primod
   version: 2024.3.0
-  sha256: 8992c13e3cfe7fbf6a9c5cd294ecb0ca9474736c83404ed06021db16266221a1
   requires_dist:
   - geopandas
   - imod>=1
@@ -4252,7 +4247,6 @@ packages:
   - tomli-w
   - xarray
   requires_python: '>=3.10'
-  editable: true
 - conda: https://conda.anaconda.org/conda-forge/win-64/proj-9.7.1-hd30e2cd_3.conda
   sha256: 8ff06eae963bdc7580ccb246df911614e9a5a23683b26326df76b1b6f3258e94
   md5: f2b0478a02d35bac5b872d4d63b96be3
