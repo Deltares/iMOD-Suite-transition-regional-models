@@ -36,7 +36,7 @@ This will generate the python environment and an ``activate.bat`` script to
 activate this environment.
 
 
-## Running the conversion
+## Convert iMOD5 model
 
 If you installed with pixi:
 
@@ -54,7 +54,7 @@ If you followed the offline instructions
 python convert <name of your ini file>
 ```
 
-## Ini settings supported
+### Configuration
 
 Arguments supported:
 
