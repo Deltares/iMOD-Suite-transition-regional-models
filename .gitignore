@@ -5,3 +5,5 @@
 _scratch/*
 # profiling files
 *.prof
+# self-extractable binaries created by pixi-pack
+*.ps1
