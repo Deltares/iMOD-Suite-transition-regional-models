@@ -6,11 +6,16 @@ This repository features created during the sprints for the NHI. Currently suppo
 
 ##  Install
 
+### With pixi (recommended, requires internet connection)
+
+Note that this requires internet connection.
+
 This repository uses pixi to manage and install python environments. 
 [Read how to install pixi here](https://pixi.prefix.dev/latest/installation/)
 As for now, installation requires internet access. 
 
-### Some background info
+#### Some background info
+
 The ``pixi.lock`` contains the exact builds of each package in the python
 environment and where to get it. It therefore ensures that everyone using this
 repository will install exactly the same versions of python packages.
@@ -19,12 +24,37 @@ Furthermore, pixi installs very fast. It will install the python packages in a
 python environment can be simply reproduced based on the ``pixi.toml`` and
 ``pixi.lock`` file.
 
-## Convert
+### Using the environment.ps1 (offline, note this install is experimental)
 
-Command: ``pixi run convert <name of your ini file>``. 
+Open powershell, call:
+
+```powershell
+.\environment.ps1
+```
+
+This will generate the python environment and an ``activate.bat`` script to
+activate this environment.
+
+
+## Running the conversion
+
+If you installed with pixi:
+
+```powershell
+pixi run convert <name of your ini file>
+```
 
 This will install the pixi environment automatically and consequently run the
 python script with the ini file you provided.
+
+If you followed the offline instructions
+
+```powershell
+.\activate.bat
+python convert <name of your ini file>
+```
+
+## Ini settings supported
 
 Arguments supported:
 
