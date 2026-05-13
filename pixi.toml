@@ -60,7 +60,7 @@ build_xugrid ={ cmd = "cd c://ProgramData/DevDrive/clones_for_dist/xugrid && pyt
 build_coupler ={ cmd = "cd c://ProgramData/DevDrive/clones_for_dist/imod_coupler && python -m build", depends-on = ["pull_coupler"], description = "Build the imod_coupler Python package."}
 build_primod ={ cmd = "cd c://ProgramData/DevDrive/clones_for_dist/imod_coupler/pre-processing && python -m build", depends-on = ["pull_coupler"], description = "Build the primod Python package."}
 build_for_pack = {depends-on = ["build_imod", "build_xugrid", "build_primod", "build_coupler"]}
-
+pack = { cmd = "pixi-pack --create-executable --environment build pixi.toml"}
 
 [environments]
 default = { features = ["github"], solve-group = "conda-deps" }
