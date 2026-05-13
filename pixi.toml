@@ -42,23 +42,24 @@ snakeviz = "*"
 git = "*"
 python-build = "*"
 
-[feature.build.pypi-dependencies]
-xugrid = { path = "c:/ProgramData/DevDrive/clones_for_dist/xugrid/dist/xugrid-0.15.2-py3-none-any.whl" }
-imod_coupler = { path = "c:/ProgramData/DevDrive/clones_for_dist/imod_coupler/dist/imod_coupler-2024.3.0-py3-none-any.whl" }
-primod ={ path = "c:/ProgramData/DevDrive/clones_for_dist/imod_coupler/pre-processing/dist/primod-2024.3.0-py3-none-any.whl" }
-imod  = { path = "c:/ProgramData/DevDrive/clones_for_dist/imod-python/dist/imod-1.0.1.dev1-py3-none-any.whl" }
+## Uncomment once ``build_for_pack`` is run and the wheel files are available in the specified paths.
+# [feature.build.pypi-dependencies]
+# xugrid = { path = "../clones_for_dist/xugrid/dist/xugrid-0.15.2-py3-none-any.whl" }
+# imod_coupler = { path = "../clones_for_dist/imod_coupler/dist/imod_coupler-2024.3.0-py3-none-any.whl" }
+# primod ={ path = "../clones_for_dist/imod_coupler/pre-processing/dist/primod-2024.3.0-py3-none-any.whl" }
+# imod  = { path = "../clones_for_dist/imod-python/dist/imod-1.0.1.dev1-py3-none-any.whl" }
 
 [feature.build.tasks]
-clone_imod = {cmd = "cd c://ProgramData/DevDrive/clones_for_dist && git clone https://github.com/Deltares/imod-python.git"}
-clone_xugrid = {cmd = "cd c://ProgramData/DevDrive/clones_for_dist && git clone https://github.com/Deltares/xugrid.git"}
-clone_coupler = {cmd = "cd c://ProgramData/DevDrive/clones_for_dist && git clone https://github.com/Deltares/imod_coupler.git"}
-pull_imod = {cmd = "cd c://ProgramData/DevDrive/clones_for_dist/imod-python && git pull"}
-pull_xugrid = {cmd = "cd c://ProgramData/DevDrive/clones_for_dist/xugrid && git pull"}
-pull_coupler = {cmd = "cd c://ProgramData/DevDrive/clones_for_dist/imod_coupler && git pull"}
-build_imod = {cmd = "cd c://ProgramData/DevDrive/clones_for_dist/imod-python && python -m build", depends-on = ["pull_imod"], description = "Build the iMOD Python package."}
-build_xugrid ={ cmd = "cd c://ProgramData/DevDrive/clones_for_dist/xugrid && python -m build", depends-on = ["pull_xugrid"], description = "Build the xugrid Python package."}
-build_coupler ={ cmd = "cd c://ProgramData/DevDrive/clones_for_dist/imod_coupler && python -m build", depends-on = ["pull_coupler"], description = "Build the imod_coupler Python package."}
-build_primod ={ cmd = "cd c://ProgramData/DevDrive/clones_for_dist/imod_coupler/pre-processing && python -m build", depends-on = ["pull_coupler"], description = "Build the primod Python package."}
+clone_imod = {cmd = "cd ../clones_for_dist && git clone https://github.com/Deltares/imod-python.git"}
+clone_xugrid = {cmd = "cd ../clones_for_dist && git clone https://github.com/Deltares/xugrid.git"}
+clone_coupler = {cmd = "cd ../clones_for_dist && git clone https://github.com/Deltares/imod_coupler.git"}
+pull_imod = {cmd = "cd ../clones_for_dist/imod-python && git pull"}
+pull_xugrid = {cmd = "cd ../clones_for_dist/xugrid && git pull"}
+pull_coupler = {cmd = "cd ../clones_for_dist/imod_coupler && git pull"}
+build_imod = {cmd = "cd ../clones_for_dist/imod-python && python -m build", depends-on = ["pull_imod"], description = "Build the iMOD Python package."}
+build_xugrid ={ cmd = "cd ../clones_for_dist/xugrid && python -m build", depends-on = ["pull_xugrid"], description = "Build the xugrid Python package."}
+build_coupler ={ cmd = "cd ../clones_for_dist/imod_coupler && python -m build", depends-on = ["pull_coupler"], description = "Build the imod_coupler Python package."}
+build_primod ={ cmd = "cd ../clones_for_dist/imod_coupler/pre-processing && python -m build", depends-on = ["pull_coupler"], description = "Build the primod Python package."}
 build_for_pack = {depends-on = ["build_imod", "build_xugrid", "build_primod", "build_coupler"]}
 pack = { cmd = "pixi-pack --create-executable --environment build pixi.toml"}
 
