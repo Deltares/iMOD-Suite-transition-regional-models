@@ -44,10 +44,17 @@ If you installed with pixi:
 pixi run convert <name of your ini file>
 ```
 
+For example:
+
+```powershell
+pixi run convert conversion_Peelvenen.ini``
+```
+
 This will install the pixi environment automatically and consequently run the
 python script with the ini file you provided.
 
-If you followed the offline instructions
+If you followed the offline installation instructions, the commands are slightly
+different:
 
 ```powershell
 .\activate.bat
