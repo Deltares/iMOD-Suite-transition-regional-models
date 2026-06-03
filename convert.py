@@ -284,12 +284,13 @@ if __name__ == "__main__":
         # Create coupling object
         simulation = make_simulation(imod5_data, period_data, settings.msw_dbase, times, target_grid=target_grid, model_name=settings.model_name)
         if isinstance(simulation, Modflow6Simulation):
-            write_kwargs = {}
+            write_kwargs = {"binary": False}
         else:
             write_kwargs = {
                 "modflow6_dll": bin_dir/"modflow6"/"libmf6.dll",
                 "metaswap_dll": bin_dir/"metaswap"/"MetaSWAP.dll",
                 "metaswap_dll_dependency": bin_dir/"metaswap",
+                "modflow6_write_kwargs": {"binary": False},
             }
         # Write coupling to disk
         simulation.write(out_dir, **write_kwargs)
