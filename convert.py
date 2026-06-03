@@ -19,9 +19,9 @@ from primod import MetaMod, MetaModDriverCoupling
 @dataclass
 class Settings:
     prjfile_path: Path
-    msw_dbase: Path
+    msw_dbase: Optional[Path]
     out_dir: Path
-    bin_dir: Path
+    bin_dir: Optional[Path]
     start_date: str
     end_date: str
     interval: str
@@ -37,9 +37,9 @@ def read_settings(inifile: Path) -> Settings:
     section = configparser.UNNAMED_SECTION
     return Settings(
         prjfile_path=Path(config.get(section, "PRJFILE_IN")),
-        msw_dbase=Path(config.get(section, "MSW_DBASE")),
+        msw_dbase=Path(config.get(section, "MSW_DBASE", fallback=None)),
         out_dir=Path(config.get(section, "OUTPUT_FOLDER")),
-        bin_dir=Path(config.get(section, "COUPLER_DIR")),
+        bin_dir=Path(config.get(section, "COUPLER_DIR", fallback=None)),
         start_date=config.get(section, "SDATE"),
         end_date=config.get(section, "EDATE"),
         interval=config.get(section, "INTERVAL", fallback="D"),
@@ -47,6 +47,30 @@ def read_settings(inifile: Path) -> Settings:
         bbox=config.get(section, "WINDOW", fallback=None),
         model_name=config.get(section, "MODELNAME", fallback="imported"),
     )
+
+
+def validate_settings(settings: Settings) -> None:
+    if not settings.prjfile_path.is_file():
+        raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
+    if settings.msw_dbase is not None and not settings.msw_dbase.is_dir():
+        raise FileNotFoundError(f"MetaSwap database directory not found at {settings.msw_dbase}")
+    if settings.bin_dir is not None and not settings.bin_dir.is_dir():
+        raise FileNotFoundError(f"Coupler binaries directory not found at {settings.bin_dir}")
+    try:
+        pd.to_datetime(settings.start_date)
+        pd.to_datetime(settings.end_date)
+    except ValueError as e:
+        raise ValueError(f"Invalid date format in settings: {e}")
+    if settings.cellsize is not None and settings.cellsize <= 0:
+        raise ValueError("Cellsize must be a positive number.")
+    if (settings.bbox is not None) ^ (settings.cellsize is not None):
+        raise ValueError("Both bbox and cellsize must be provided together to create target grid.")
+
+def validate_msw_settings(settings: Settings) -> None:
+    if settings.msw_dbase is None:
+        raise ValueError("MetaSwap database path must be provided to create MetaSwap model.")
+    if settings.bin_dir is None:
+        raise ValueError("Coupler binaries directory must be provided to create MetaSwap model.")
 
 
 def create_target_grid(
@@ -59,8 +83,6 @@ def create_target_grid(
 
     if window is None and cellsize is None:
         return None
-    elif window is None or cellsize is None:
-        raise ValueError("Both window and cellsize must be provided to create target grid.")
 
     window_tuple = tuple(map(float, window.split(",")))
     xmin, ymin, xmax, ymax = window_tuple
@@ -75,7 +97,7 @@ def convert_imod5_to_mf6_sim(
     """
     Convert iMOD5 data to a MODFLOW 6 simulation object.
     """
-    simulation = Modflow6Simulation.from_imod5_data(
+    mf6_sim = Modflow6Simulation.from_imod5_data(
         imod5_data,
         period_data,
         times,
@@ -83,14 +105,14 @@ def convert_imod5_to_mf6_sim(
         name=model_name,
     )
     # Loosen validation settings
-    simulation.set_validation_settings(imod.mf6.ValidationSettings(
+    mf6_sim.set_validation_settings(imod.mf6.ValidationSettings(
         ignore_time=True, 
         strict_hfb_validation=False, 
         strict_well_validation=False, 
         ))
     name = f"{model_name}_model"
     # Set settings so that the simulation behaves like iMOD5
-    simulation[name]["oc"] = OutputControl(
+    mf6_sim[name]["oc"] = OutputControl(
         save_head="last", save_budget="last"
     )
     solution = Solution(
@@ -105,24 +127,24 @@ def convert_imod5_to_mf6_sim(
         linear_acceleration="bicgstab",
         relaxation_factor=0.97,
     )
-    simulation["ims"] = solution
+    mf6_sim["ims"] = solution
 
-    simulation[name]["npf"]["xt3d_option"] = True
+    mf6_sim[name]["npf"]["xt3d_option"] = True
 
-    return simulation
+    return mf6_sim
 
 
-def cleanup_mf6_sim(simulation: Modflow6Simulation, model_name: str) -> None:
+def cleanup_mf6_sim(mf6_sim: Modflow6Simulation, model_name: str) -> None:
     """
     Cleanup the MODFLOW6 simulation of erronous package data
     """
     name = f"{model_name}_model"
-    model = simulation[name]
+    model = mf6_sim[name]
     for pkg in model.values():
         pkg.dataset.load()
 
     mask = model.domain
-    simulation.mask_all_models(mask, ignore_time_purge_empty=True)
+    mf6_sim.mask_all_models(mask, ignore_time_purge_empty=True)
     dis = model["dis"]
 
     topsystems_keys = [
@@ -154,12 +176,15 @@ def convert_imod5_to_msw_model(
     imod5_data: dict,
     mf6_sim: Modflow6Simulation,
     times: list,
-    msw_dbase: Path | str,
+    msw_dbase: Optional[Path],
     model_name: str,
 ) -> imod.msw.MetaSwapModel:
     """
     Convert iMOD5 data to a MetaSwap model.
     """
+    if "cap" not in imod5_data:
+        raise ValueError("Projectfile does not contain 'cap' data, cannot create MetaSwap model.")
+
     name = f"{model_name}_model"
     dis_pkg = mf6_sim[name]["dis"]
     msw_model = imod.msw.MetaSwapModel.from_imod5_data(imod5_data, dis_pkg, times)
@@ -177,14 +202,11 @@ def convert_imod5_to_msw_model(
 
 
 def import_mf6_and_msw(
-    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
-) -> tuple[Modflow6Simulation, imod.msw.MetaSwapModel]:
+    imod5_data: dict, period_data: dict, msw_dbase: Optional[Path], times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
+) -> tuple[Modflow6Simulation, Optional[imod.msw.MetaSwapModel]]:
     """
     Convert iMOD5 LHM model to MODFLOW 6 using imod-python
     """
-
-    # Read iMOD5 project file data
-    imod5_data, period_data = open_projectfile_data(prjfile_path)
 
     # Convert to MODFLOW 6 simulation and cleanup
     mf6_simulation = convert_imod5_to_mf6_sim(
@@ -193,22 +215,28 @@ def import_mf6_and_msw(
     cleanup_mf6_sim(mf6_simulation, model_name)
 
     # Convert to MetaSwap model
-    msw_model = convert_imod5_to_msw_model(
-        imod5_data, mf6_simulation, times, msw_dbase, model_name
-    )
+    if "cap" in imod5_data:
+        msw_model = convert_imod5_to_msw_model(
+            imod5_data, mf6_simulation, times, msw_dbase, model_name
+        )
+    else:
+        msw_model = None
 
     return mf6_simulation, msw_model
 
 
-def make_metamod_coupling(
-    prjfile_path: Path, msw_dbase: Path, times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
-) -> MetaMod:
+def make_simulation(
+    imod5_data: dict, period_data: dict, msw_dbase: Optional[Path], times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
+) -> MetaMod | Modflow6Simulation:
     """
     Create Coupling of MODFLOW 6 and MetaSwap model
     """
     mf6_simulation, msw_model = import_mf6_and_msw(
-        prjfile_path, msw_dbase, times, target_grid=target_grid, model_name=model_name,
+        imod5_data, period_data, msw_dbase, times, target_grid=target_grid, model_name=model_name,
     )
+    if msw_model is None:
+        return mf6_simulation
+
     name = f"{model_name}_model"
     driver_coupling = MetaModDriverCoupling(
         mf6_model=name,
@@ -228,6 +256,7 @@ if __name__ == "__main__":
     inifile = sys.argv[1]
 
     settings = read_settings(inifile)
+    validate_settings(settings)
     out_dir = settings.out_dir
     bin_dir = settings.bin_dir
 
@@ -246,14 +275,26 @@ if __name__ == "__main__":
         times = pd.date_range(start=settings.start_date, end=settings.end_date, freq=settings.interval).tolist()
         # Create target grid
         target_grid = create_target_grid(settings.bbox, settings.cellsize)
+        # Read iMOD5 project file data
+        imod5_data, period_data = open_projectfile_data(settings.prjfile_path)
+        has_msw = "cap" in imod5_data
+        if has_msw:
+            validate_msw_settings(settings)
+
         # Create coupling object
-        coupling = make_metamod_coupling(settings.prjfile_path, settings.msw_dbase, times, target_grid=target_grid, model_name=settings.model_name)
+        simulation = make_simulation(imod5_data, period_data, settings.msw_dbase, times, target_grid=target_grid, model_name=settings.model_name)
+        if isinstance(simulation, Modflow6Simulation):
+            write_kwargs = {}
+        else:
+            write_kwargs = {
+                "modflow6_dll": bin_dir/"mf6.dll",
+                "metaswap_dll": bin_dir/"msw.dll",
+                "metaswap_dll_dependency": bin_dir,
+            }
         # Write coupling to disk
-        coupling.write(
-            out_dir,
-            modflow6_dll=bin_dir/"msw.dll",
-            metaswap_dll=bin_dir,
-            metaswap_dll_dependency=bin_dir/"mf6.dll",
-        )
+        simulation.write(out_dir, **write_kwargs)
         # Run coupled simulation
-        # coupling.run()
+        # simulation.run()
+
+# %%
+
