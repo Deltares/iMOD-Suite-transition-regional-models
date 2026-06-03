@@ -52,8 +52,8 @@ def read_settings(inifile: Path) -> Settings:
 def validate_settings(settings: Settings) -> None:
     if not settings.prjfile_path.is_file():
         raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
-    if settings.msw_dbase is not None and not settings.msw_dbase.is_dir():
-        raise FileNotFoundError(f"MetaSwap database directory not found at {settings.msw_dbase}")
+    # if settings.msw_dbase is not None and not settings.msw_dbase.is_dir():
+    #     raise FileNotFoundError(f"MetaSwap database directory not found at {settings.msw_dbase}")
     if settings.bin_dir is not None and not settings.bin_dir.is_dir():
         raise FileNotFoundError(f"Coupler binaries directory not found at {settings.bin_dir}")
     try:
@@ -287,9 +287,9 @@ if __name__ == "__main__":
             write_kwargs = {}
         else:
             write_kwargs = {
-                "modflow6_dll": bin_dir/"mf6.dll",
-                "metaswap_dll": bin_dir/"msw.dll",
-                "metaswap_dll_dependency": bin_dir,
+                "modflow6_dll": bin_dir/"modflow6"/"libmf6.dll",
+                "metaswap_dll": bin_dir/"metaswap"/"MetaSWAP.dll",
+                "metaswap_dll_dependency": bin_dir/"metaswap",
             }
         # Write coupling to disk
         simulation.write(out_dir, **write_kwargs)
