@@ -47,7 +47,7 @@ pixi run convert <name of your ini file>
 For example:
 
 ```powershell
-pixi run convert conversion_Peelvenen.ini``
+pixi run convert conversion_Peelvenen.ini
 ```
 
 This will install the pixi environment automatically and consequently run the
@@ -68,14 +68,16 @@ Arguments supported:
 | Argument | Required | Default/Fallback | Datatype | Brief explanation |
 | --- | --- | --- | --- | --- |
 | `PRJFILE_IN` | Yes | None | Path (string) | Path to the iMOD5 `.PRJ` input project file. |
-| `COUPLER_DIR` | Yes | None | Directory path (string) | Path to the folder containing coupler binaries/executables. |
-| `MSW_DBASE` | Yes | None | Directory path (string) | Path to the MetaSWAP database directory used during conversion. |
 | `MODELNAME` | No | `imported` | String | Short model identifier used for naming outputs and metadata. |
 | `OUTPUT_FOLDER` | Yes | None | Directory path (string) | Destination folder where converted files are written. |
 | `SDATE` | Yes | None | Date string (`YYYY-MM-DD`) | Start date of the simulation period to convert. |
 | `EDATE` | Yes | None | Date string (`YYYY-MM-DD`) | End date of the simulation period to convert. |
 | `INTERVAL` | No | `D` | String | Time step interval code (for example `D` for daily). [Anything accepted by pandas is supported](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases) |
-| `WINDOW` | No* | `None` | Comma-separated numbers | Spatial extent as `xmin,ymin,xmax,ymax` in model coordinates. |
-| `CELLSIZE` | No* | `None` | Number (integer/float) | Target horizontal grid cell size (typically in meters). |
+| `COUPLER_DIR` | No* | None | Directory path (string) | Path to the folder containing coupler binaries/executables. |
+| `MSW_DBASE` | No* | None | Directory path (string) | Path to the MetaSWAP database directory used during conversion. |
+| `WINDOW` | No** | `None` | Comma-separated numbers | Spatial extent as `xmin,ymin,xmax,ymax` in model coordinates. |
+| `CELLSIZE` | No** | `None` | Number (integer/float) | Target horizontal grid cell size (typically in meters). |
 
-\* `WINDOW` and `CELLSIZE` are optional together. If one is provided, the other must also be provided.
+\* Only required when there is CAP entry in the projectfile for MetaSWAP.
+
+\*\* `WINDOW` and `CELLSIZE` are optional together. If one is provided, the other must also be provided.
