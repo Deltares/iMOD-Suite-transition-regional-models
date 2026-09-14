@@ -1,32 +1,34 @@
 # %%
 import configparser
 import sys
-from pathlib import Path
-from typing import Optional
 from dataclasses import dataclass
+from pathlib import Path
 
-import xarray as xr
 import imod
+import pandas as pd
+import xarray as xr
 from imod.formats.prj.prj import open_projectfile_data
 from imod.logging.config import LoggerType
 from imod.logging.loglevel import LogLevel
 from imod.mf6.ims import Solution
 from imod.mf6.oc import OutputControl
 from imod.mf6.simulation import Modflow6Simulation
-import pandas as pd
 from primod import MetaMod, MetaModDriverCoupling
+
+from helpers import clip_wel_packages_to_domain
+
 
 @dataclass
 class Settings:
     prjfile_path: Path
-    msw_dbase: Optional[Path]
+    msw_dbase: Path | None
     out_dir: Path
-    bin_dir: Optional[Path]
+    bin_dir: Path | None
     start_date: str
     end_date: str
     interval: str
-    cellsize: Optional[float]
-    bbox: Optional[str]
+    cellsize: float | None
+    bbox: str | None
     model_name: str
 
 
@@ -74,9 +76,9 @@ def validate_msw_settings(settings: Settings) -> None:
 
 
 def create_target_grid(
-        window: Optional[str], 
-        cellsize: Optional[float]
-    ) -> Optional[xr.DataArray]:
+        window: str | None, 
+        cellsize: float | None
+    ) -> xr.DataArray | None:
     """
     Create target grid for MODFLOW 6 simulation based on provided window and cellsize.
     """
@@ -92,7 +94,7 @@ def create_target_grid(
     )
 
 def convert_imod5_to_mf6_sim(
-    imod5_data: dict, period_data: dict, times: list[pd.Timestamp], target_grid: Optional[xr.DataArray], model_name: str
+    imod5_data: dict, period_data: dict, times: list[pd.Timestamp], target_grid: xr.DataArray | None, model_name: str
 ) -> Modflow6Simulation:
     """
     Convert iMOD5 data to a MODFLOW 6 simulation object.
@@ -142,6 +144,11 @@ def cleanup_mf6_sim(mf6_sim: Modflow6Simulation, model_name: str) -> None:
     model = mf6_sim[name]
     for pkg in model.values():
         pkg.dataset.load()
+    wel_keys = [key for key in model.keys() if "wel-" in key]
+
+    # Drop wells that fall completely outside this (regional) domain's
+    # extent, before mask_all_models gets a chance to error on them
+    clip_wel_packages_to_domain(model, wel_keys=wel_keys)
 
     mask = model.domain
     mf6_sim.mask_all_models(mask, ignore_time_purge_empty=True)
@@ -153,7 +160,6 @@ def cleanup_mf6_sim(mf6_sim: Modflow6Simulation, model_name: str) -> None:
         if ("riv-" in key) | ("drn-" in key) | ("ghb-" in key)
     ]
 
-    wel_keys = [key for key in model.keys() if "wel-" in key]
     # Account for edge case where iMOD5 allocates to left-hand column of edge,
     # and iMOD Python to right-hand.
     for pkgname in wel_keys:
@@ -176,7 +182,7 @@ def convert_imod5_to_msw_model(
     imod5_data: dict,
     mf6_sim: Modflow6Simulation,
     times: list,
-    msw_dbase: Optional[Path],
+    msw_dbase: Path | None,
     model_name: str,
 ) -> imod.msw.MetaSwapModel:
     """
@@ -202,8 +208,8 @@ def convert_imod5_to_msw_model(
 
 
 def import_mf6_and_msw(
-    imod5_data: dict, period_data: dict, msw_dbase: Optional[Path], times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
-) -> tuple[Modflow6Simulation, Optional[imod.msw.MetaSwapModel]]:
+    imod5_data: dict, period_data: dict, msw_dbase: Path | None, times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
+) -> tuple[Modflow6Simulation, imod.msw.MetaSwapModel | None]:
     """
     Convert iMOD5 LHM model to MODFLOW 6 using imod-python
     """
@@ -226,7 +232,7 @@ def import_mf6_and_msw(
 
 
 def make_simulation(
-    imod5_data: dict, period_data: dict, msw_dbase: Optional[Path], times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
+    imod5_data: dict, period_data: dict, msw_dbase: Path | None, times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
 ) -> MetaMod | Modflow6Simulation:
     """
     Create Coupling of MODFLOW 6 and MetaSwap model
