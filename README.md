@@ -70,8 +70,8 @@ Arguments supported:
 | `PRJFILE_IN` | Yes | None | Path (string) | Path to the iMOD5 `.PRJ` input project file. |
 | `MODELNAME` | No | `imported` | String | Short model identifier used for naming outputs and metadata. |
 | `OUTPUT_FOLDER` | Yes | None | Directory path (string) | Destination folder where converted files are written. |
-| `SDATE` | Yes | None | Date string (`YYYY-MM-DD`) | Start date of the simulation period to convert. |
-| `EDATE` | Yes | None | Date string (`YYYY-MM-DD`) | End date of the simulation period to convert. |
+| `SDATE` | No | "1970-01-01" | Date string (`YYYY-MM-DD`) | Start date of the simulation period to convert. |
+| `EDATE` | No | "1970-01-01" | Date string (`YYYY-MM-DD`) | End date of the simulation period to convert. |
 | `INTERVAL` | No | `D` | String | Time step interval code (for example `D` for daily). [Anything accepted by pandas is supported](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases) |
 | `COUPLER_DIR` | No* | None | Directory path (string) | Path to the folder containing coupler binaries/executables. |
 | `MSW_DBASE` | No* | None | Directory path (string) | Path to the MetaSWAP database directory used during conversion. |

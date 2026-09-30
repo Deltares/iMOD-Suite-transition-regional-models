@@ -24,7 +24,7 @@ class Settings:
     msw_dbase: Path | None
     out_dir: Path
     bin_dir: Path | None
-    start_date: str
+    start_date: str | None
     end_date: str
     interval: str
     cellsize: float | None
@@ -42,8 +42,8 @@ def read_settings(inifile: Path) -> Settings:
         msw_dbase=Path(config.get(section, "MSW_DBASE", fallback=None)),
         out_dir=Path(config.get(section, "OUTPUT_FOLDER")),
         bin_dir=Path(config.get(section, "COUPLER_DIR", fallback=None)),
-        start_date=config.get(section, "SDATE"),
-        end_date=config.get(section, "EDATE"),
+        start_date=config.get(section, "SDATE", fallback="1970-01-01"),
+        end_date=config.get(section, "EDATE", fallback="1970-01-02"),
         interval=config.get(section, "INTERVAL", fallback="D"),
         cellsize=config.getfloat(section, "CELLSIZE", fallback=None),
         bbox=config.get(section, "WINDOW", fallback=None),
