@@ -24,6 +24,7 @@ class Settings:
     msw_dbase: Path | None
     out_dir: Path
     bin_dir: Path | None
+    is_steady: bool
     start_date: str | None
     end_date: str
     interval: str
@@ -37,11 +38,19 @@ def read_settings(inifile: Path) -> Settings:
     config.read(inifile)
 
     section = configparser.UNNAMED_SECTION
+
+    # Lowercase the ISS value for consistent comparison
+    iss_dict = {"steady-state": True, "transient": False, None: None}
+    iss_value = config.get(section, "ISS", fallback=None)
+    if iss_value is not None:
+        iss_value = iss_value.strip().lower()
+
     return Settings(
         prjfile_path=Path(config.get(section, "PRJFILE_IN")),
         msw_dbase=Path(config.get(section, "MSW_DBASE", fallback=None)),
         out_dir=Path(config.get(section, "OUTPUT_FOLDER")),
         bin_dir=Path(config.get(section, "COUPLER_DIR", fallback=None)),
+        is_steady=iss_dict.get(iss_value),
         start_date=config.get(section, "SDATE", fallback="1970-01-01"),
         end_date=config.get(section, "EDATE", fallback="1970-01-02"),
         interval=config.get(section, "INTERVAL", fallback="D"),
@@ -56,6 +65,8 @@ def validate_settings(settings: Settings) -> None:
         raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
     # if settings.msw_dbase is not None and not settings.msw_dbase.is_dir():
     #     raise FileNotFoundError(f"MetaSwap database directory not found at {settings.msw_dbase}")
+    if settings.is_steady is None:
+        raise ValueError("Steady state setting (ISS) must be provided in the configuration. Values must be 'steady-state' or 'transient'.")
     if settings.bin_dir is not None and not settings.bin_dir.is_dir():
         raise FileNotFoundError(f"Coupler binaries directory not found at {settings.bin_dir}")
     try:
