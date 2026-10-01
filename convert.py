@@ -63,8 +63,6 @@ def read_settings(inifile: Path) -> Settings:
 def validate_settings(settings: Settings) -> None:
     if not settings.prjfile_path.is_file():
         raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
-    # if settings.msw_dbase is not None and not settings.msw_dbase.is_dir():
-    #     raise FileNotFoundError(f"MetaSwap database directory not found at {settings.msw_dbase}")
     if settings.is_steady is None:
         raise ValueError("Steady state setting (ISS) must be provided in the configuration. Values must be 'steady-state' or 'transient'.")
     if settings.bin_dir is not None and not settings.bin_dir.is_dir():
