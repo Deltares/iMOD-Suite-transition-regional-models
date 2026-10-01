@@ -324,6 +324,10 @@ if __name__ == "__main__":
         )
         if isinstance(simulation, Modflow6Simulation):
             write_kwargs = {"binary": False}
+            # Modify out_dir to point to a modflow6 subdirectory
+            # so that it is consistent to what primod writes.
+            out_dir = out_dir / "modflow6"
+            out_dir.mkdir(parents=True, exist_ok=True)
         else:
             write_kwargs = {
                 "modflow6_dll": bin_dir/"modflow6"/"libmf6.dll",
