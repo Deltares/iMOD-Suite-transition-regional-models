@@ -7,3 +7,6 @@ _scratch/*
 *.prof
 # self-extractable binaries created by pixi-pack
 *.ps1
+# Compiled Python files
+__pycache__/
+*.pyc
