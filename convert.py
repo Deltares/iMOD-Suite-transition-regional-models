@@ -24,7 +24,7 @@ class Settings:
     msw_dbase: Path | None
     out_dir: Path
     bin_dir: Path | None
-    is_steady: bool
+    is_steady_state: bool
     start_date: str | None
     end_date: str
     interval: str
@@ -50,7 +50,7 @@ def read_settings(inifile: Path) -> Settings:
         msw_dbase=Path(config.get(section, "MSW_DBASE", fallback=None)),
         out_dir=Path(config.get(section, "OUTPUT_FOLDER")),
         bin_dir=Path(config.get(section, "COUPLER_DIR", fallback=None)),
-        is_steady=iss_dict.get(iss_value),
+        is_steady_state=iss_dict.get(iss_value),
         start_date=config.get(section, "SDATE", fallback="1970-01-01"),
         end_date=config.get(section, "EDATE", fallback="1970-01-02"),
         interval=config.get(section, "INTERVAL", fallback="D"),
@@ -63,7 +63,7 @@ def read_settings(inifile: Path) -> Settings:
 def validate_settings(settings: Settings) -> None:
     if not settings.prjfile_path.is_file():
         raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
-    if settings.is_steady is None:
+    if settings.is_steady_state is None:
         raise ValueError("Steady state setting (ISS) must be provided in the configuration. Values must be 'steady-state' or 'transient'.")
     if settings.bin_dir is not None and not settings.bin_dir.is_dir():
         raise FileNotFoundError(f"Coupler binaries directory not found at {settings.bin_dir}")
@@ -217,12 +217,22 @@ def convert_imod5_to_msw_model(
 
 
 def import_mf6_and_msw(
-    imod5_data: dict, period_data: dict, msw_dbase: Path | None, times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
+    imod5_data: dict,
+    period_data: dict,
+    is_steady_state: bool,
+    msw_dbase: Path | None,
+    times: list[pd.Timestamp],
+    target_grid: xr.DataArray,
+    model_name: str
 ) -> tuple[Modflow6Simulation, imod.msw.MetaSwapModel | None]:
     """
     Convert iMOD5 LHM model to MODFLOW 6 using imod-python
     """
-
+    # Remove storage data for steady-state simulations, so that
+    # imod.mf6.GroundwaterFlowModel.from_imod5_data adds a dummy storage package
+    # again with steady-state condition on.
+    if not is_steady_state and ("sto" in imod5_data):
+        imod5_data.pop("sto")
     # Convert to MODFLOW 6 simulation and cleanup
     mf6_simulation = convert_imod5_to_mf6_sim(
         imod5_data, period_data, times, target_grid=target_grid, model_name=model_name,
@@ -230,7 +240,7 @@ def import_mf6_and_msw(
     cleanup_mf6_sim(mf6_simulation, model_name)
 
     # Convert to MetaSwap model
-    if "cap" in imod5_data:
+    if not is_steady_state and ("cap" in imod5_data):
         msw_model = convert_imod5_to_msw_model(
             imod5_data, mf6_simulation, times, msw_dbase, model_name
         )
@@ -241,13 +251,19 @@ def import_mf6_and_msw(
 
 
 def make_simulation(
-    imod5_data: dict, period_data: dict, msw_dbase: Path | None, times: list[pd.Timestamp], target_grid: xr.DataArray, model_name: str
+    imod5_data: dict,
+    period_data: dict,
+    is_steady_state: bool,
+    msw_dbase: Path | None,
+    times: list[pd.Timestamp],
+    target_grid: xr.DataArray,
+    model_name: str
 ) -> MetaMod | Modflow6Simulation:
     """
     Create Coupling of MODFLOW 6 and MetaSwap model
     """
     mf6_simulation, msw_model = import_mf6_and_msw(
-        imod5_data, period_data, msw_dbase, times, target_grid=target_grid, model_name=model_name,
+        imod5_data, period_data, is_steady_state, msw_dbase, times, target_grid=target_grid, model_name=model_name,
     )
     if msw_model is None:
         return mf6_simulation
@@ -297,7 +313,15 @@ if __name__ == "__main__":
             validate_msw_settings(settings)
 
         # Create coupling object
-        simulation = make_simulation(imod5_data, period_data, settings.msw_dbase, times, target_grid=target_grid, model_name=settings.model_name)
+        simulation = make_simulation(
+            imod5_data,
+            period_data,
+            settings.is_steady_state,
+            settings.msw_dbase,
+            times,
+            target_grid=target_grid,
+            model_name=settings.model_name
+        )
         if isinstance(simulation, Modflow6Simulation):
             write_kwargs = {"binary": False}
         else:
