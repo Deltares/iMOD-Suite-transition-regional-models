@@ -655,7 +655,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_2.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
-      - pypi: git+https://github.com/deltares/imod-python#16baab2f007941dba3ea2e89d0074ba24fe214a9
+      - pypi: git+https://github.com/deltares/imod-python#85c6f143bbb552cac678e8171a62f6a37271303b
       - pypi: git+https://github.com/deltares/imod_coupler#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
       - pypi: git+https://github.com/deltares/imod_coupler?subdirectory=pre-processing#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
       - pypi: git+https://github.com/deltares/xugrid#b5e7d84d45c65d162f7eca6375267fca92ad570a
@@ -1000,7 +1000,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_2.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
-      - pypi: git+https://github.com/deltares/imod-python#16baab2f007941dba3ea2e89d0074ba24fe214a9
+      - pypi: git+https://github.com/deltares/imod-python#85c6f143bbb552cac678e8171a62f6a37271303b
       - pypi: git+https://github.com/deltares/imod_coupler#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
       - pypi: git+https://github.com/deltares/imod_coupler?subdirectory=pre-processing#3ecb4b174f9371f0b1db02eaf49fbb85bab22375
       - pypi: git+https://github.com/deltares/xugrid#b5e7d84d45c65d162f7eca6375267fca92ad570a
@@ -5732,9 +5732,9 @@ packages:
   purls: []
   size: 388453
   timestamp: 1764777142545
-- pypi: git+https://github.com/deltares/imod-python#16baab2f007941dba3ea2e89d0074ba24fe214a9
+- pypi: git+https://github.com/deltares/imod-python#85c6f143bbb552cac678e8171a62f6a37271303b
   name: imod
-  version: 1.0.1.dev1
+  version: 1.1.1.dev0
   requires_dist:
   - affine
   - cftime>=1
