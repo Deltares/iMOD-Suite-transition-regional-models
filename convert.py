@@ -249,7 +249,7 @@ def import_mf6_and_msw(
     # Remove storage data for steady-state simulations, so that
     # imod.mf6.GroundwaterFlowModel.from_imod5_data adds a dummy storage package
     # again with steady-state condition on.
-    if not is_steady_state and ("sto" in imod5_data):
+    if is_steady_state and ("sto" in imod5_data):
         imod5_data.pop("sto")
     # Convert to MODFLOW 6 simulation and cleanup
     mf6_simulation = convert_imod5_to_mf6_sim(
