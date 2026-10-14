@@ -67,7 +67,7 @@ def validate_settings(settings: Settings) -> None:
         raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
     if settings.out_dir.exists():
         if any(settings.out_dir.iterdir()) and not settings.overwrite:
-            raise FileExistsError(f"Output folder is not empty: {settings.out_dir}")
+            raise FileExistsError(f"Output folder is not empty: {settings.out_dir}, please either empty it or set 'overwrite' to True.")
     if settings.is_steady_state is None:
         raise ValueError("Steady state setting (ISS) must be provided in the configuration. Values must be 'steady-state' or 'transient'.")
     if settings.bin_dir is not None and not settings.bin_dir.is_dir():
