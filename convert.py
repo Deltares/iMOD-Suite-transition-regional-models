@@ -36,6 +36,7 @@ class Settings:
     cellsize: float | None
     bbox: str | None
     model_name: str
+    overwrite: bool
 
 
 def read_settings(inifile: Path) -> Settings:
@@ -63,6 +64,7 @@ def read_settings(inifile: Path) -> Settings:
         cellsize=config.getfloat(section, "CELLSIZE", fallback=None),
         bbox=config.get(section, "WINDOW", fallback=None),
         model_name=config.get(section, "MODELNAME", fallback="imported"),
+        overwrite=config.getboolean(section, "OVERWRITE", fallback=False),
     )
 
 
@@ -70,6 +72,9 @@ def validate_settings(settings: Settings) -> None:
     imod_logger.info("Validating general settings")
     if not settings.prjfile_path.is_file():
         raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
+    if settings.out_dir.exists():
+        if any(settings.out_dir.iterdir()) and not settings.overwrite:
+            raise FileExistsError(f"Output folder is not empty: {settings.out_dir}, please either empty it or set 'overwrite' to True.")
     if settings.is_steady_state is None:
         raise ValueError("Steady state setting (ISS) must be provided in the configuration. Values must be 'steady-state' or 'transient'.")
     if settings.bin_dir is not None and not settings.bin_dir.is_dir():
