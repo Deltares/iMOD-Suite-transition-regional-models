@@ -1,5 +1,7 @@
 # %%
+import argparse
 import configparser
+import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +12,7 @@ import xarray as xr
 from imod.formats.prj.prj import open_projectfile_data
 from imod.logging.config import LoggerType
 from imod.logging.loglevel import LogLevel
+from imod.logging.pythonlogger import _formatter
 from imod.mf6.ims import Solution
 from imod.mf6.oc import OutputControl
 from imod.mf6.simulation import Modflow6Simulation
@@ -17,6 +20,8 @@ from primod import MetaMod, MetaModDriverCoupling
 
 from helpers import clip_wel_packages_to_domain
 
+# Loggers in python are singletons, so this is the same instance as the one used in imod.logging.pythonlogger.PythonLogger.
+imod_logger = logging.getLogger("imod")  
 
 @dataclass
 class Settings:
@@ -35,6 +40,7 @@ class Settings:
 
 
 def read_settings(inifile: Path) -> Settings:
+    imod_logger.info(f"Reading settings from {inifile}")
     config = configparser.ConfigParser(allow_unnamed_section=True)
     config.read(inifile)
 
@@ -63,6 +69,7 @@ def read_settings(inifile: Path) -> Settings:
 
 
 def validate_settings(settings: Settings) -> None:
+    imod_logger.info("Validating general settings")
     if not settings.prjfile_path.is_file():
         raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
     if settings.out_dir.exists():
@@ -82,7 +89,9 @@ def validate_settings(settings: Settings) -> None:
     if (settings.bbox is not None) ^ (settings.cellsize is not None):
         raise ValueError("Both bbox and cellsize must be provided together to create target grid.")
 
+
 def validate_msw_settings(settings: Settings) -> None:
+    imod_logger.info("Validating MetaSwap settings")
     if settings.msw_dbase is None:
         raise ValueError("MetaSwap database path must be provided to create MetaSwap model.")
     if settings.bin_dir is None:
@@ -96,7 +105,7 @@ def create_target_grid(
     """
     Create target grid for MODFLOW 6 simulation based on provided window and cellsize.
     """
-
+    imod_logger.info("Creating target grid")
     if window is None and cellsize is None:
         return None
 
@@ -107,12 +116,18 @@ def create_target_grid(
         dx=cellsize, xmin=xmin, xmax=xmax, dy=-cellsize, ymin=ymin, ymax=ymax
     )
 
+
 def convert_imod5_to_mf6_sim(
-    imod5_data: dict, period_data: dict, times: list[pd.Timestamp], target_grid: xr.DataArray | None, model_name: str
+    imod5_data: dict,
+    period_data: dict,
+    times: list[pd.Timestamp],
+    target_grid: xr.DataArray | None,
+    model_name: str,
 ) -> Modflow6Simulation:
     """
     Convert iMOD5 data to a MODFLOW 6 simulation object.
     """
+    imod_logger.info("Converting iMOD5 data to MODFLOW 6 simulation")
     mf6_sim = Modflow6Simulation.from_imod5_data(
         imod5_data,
         period_data,
@@ -154,6 +169,7 @@ def cleanup_mf6_sim(mf6_sim: Modflow6Simulation, model_name: str) -> None:
     """
     Cleanup the MODFLOW6 simulation of erronous package data
     """
+    imod_logger.info("Cleaning up MODFLOW 6 simulation")
     name = f"{model_name}_model"
     model = mf6_sim[name]
     for pkg in model.values():
@@ -202,6 +218,7 @@ def convert_imod5_to_msw_model(
     """
     Convert iMOD5 data to a MetaSwap model.
     """
+    imod_logger.info("Converting iMOD5 data to MetaSwap model")
     if "cap" not in imod5_data:
         raise ValueError("Projectfile does not contain 'cap' data, cannot create MetaSwap model.")
 
@@ -228,11 +245,12 @@ def import_mf6_and_msw(
     msw_dbase: Path | None,
     times: list[pd.Timestamp],
     target_grid: xr.DataArray,
-    model_name: str
+    model_name: str,
 ) -> tuple[Modflow6Simulation, imod.msw.MetaSwapModel | None]:
     """
     Convert iMOD5 LHM model to MODFLOW 6 using imod-python
     """
+    imod_logger.info("Importing MODFLOW 6 and MetaSwap models")
     # Remove storage data for steady-state simulations, so that
     # imod.mf6.GroundwaterFlowModel.from_imod5_data adds a dummy storage package
     # again with steady-state condition on.
@@ -262,11 +280,12 @@ def make_simulation(
     msw_dbase: Path | None,
     times: list[pd.Timestamp],
     target_grid: xr.DataArray,
-    model_name: str
+    model_name: str,
 ) -> MetaMod | Modflow6Simulation:
     """
     Create Coupling of MODFLOW 6 and MetaSwap model
     """
+    imod_logger.info("Creating simulation with MODFLOW 6 and MetaSwap coupling")
     mf6_simulation, msw_model = import_mf6_and_msw(
         imod5_data, period_data, is_steady_state, msw_dbase, times, target_grid=target_grid, model_name=model_name,
     )
@@ -286,26 +305,50 @@ def make_simulation(
     )
 
 
-# %%
-if __name__ == "__main__":
-    # Read settings from ini file
-    inifile = sys.argv[1]
+def init_logging() -> None:
+    """Initialize logging with stream handler."""
+    imod.logging.configure(
+        LoggerType.PYTHON,
+        log_level=LogLevel.DEBUG,
+        add_default_file_handler=False,
+        add_default_stream_handler=False,
+    )
+    # Add streamhandler
+    streamhandler = logging.StreamHandler(sys.stdout)
+    streamhandler.setLevel(logging.INFO)
+    streamhandler.setFormatter(_formatter())
+    imod_logger.addHandler(streamhandler)
+    imod_logger.info("Logging initialized.")
 
-    settings = read_settings(inifile)
-    validate_settings(settings)
-    out_dir = settings.out_dir
-    bin_dir = settings.bin_dir
+def _add_filehandler(logfile_path: Path):
+    """Add a file handler to the logger for more verbose logging output."""
+    filehandler = logging.FileHandler(logfile_path, mode="w")
+    filehandler.setLevel(logging.DEBUG)
+    filehandler.setFormatter(_formatter())
+    imod_logger.addHandler(filehandler)
+    imod_logger.info(f"More verbose logging output will be written to {logfile_path}")
 
-    # Configure logging to file in output directory
-    logfile_path = out_dir / "conversion_log.txt"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    with open(logfile_path, "w") as sys.stdout:
-        imod.logging.configure(
-            LoggerType.PYTHON,
-            log_level=LogLevel.DEBUG,
-            add_default_file_handler=False,
-            add_default_stream_handler=True,
-        )
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Convert iMOD5 project to MODFLOW 6 and MetaSwap simulation")
+    parser.add_argument("inifile", type=Path, help="Path to the ini file with settings")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    init_logging()
+    try:
+        # Read settings from ini file
+        settings = read_settings(args.inifile)
+        validate_settings(settings)
+        out_dir = settings.out_dir
+        bin_dir = settings.bin_dir
+        
+        # Add file handler for logging to a file in the output directory
+        logfile_path = out_dir / "conversion_log.txt"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _add_filehandler(logfile_path)   
 
         # Generate list of times for simulation
         times = pd.date_range(start=settings.start_date, end=settings.end_date, freq=settings.interval).tolist()
@@ -344,6 +387,9 @@ if __name__ == "__main__":
         simulation.write(out_dir, **write_kwargs)
         # Run coupled simulation
         # simulation.run()
+    except Exception:
+        imod_logger.exception("An error occurred during the conversion process.") # this includes traceback in the logs
+        raise
 
-# %%
-
+if __name__ == "__main__":
+    main()
