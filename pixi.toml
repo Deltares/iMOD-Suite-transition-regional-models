@@ -32,7 +32,7 @@ jupyter = ">=1.1.1,<2"
 xugrid = { git = "https://github.com/Deltares/xugrid.git" }
 imod_coupler = { git = "https://github.com/Deltares/imod_coupler.git"}
 primod ={ git = "https://github.com/Deltares/imod_coupler.git", subdirectory = "pre-processing" }
-imod  = { git = "https://github.com/Deltares/imod-python.git" }
+imod  = { git = "https://github.com/Deltares/imod-python.git", branch="issue_#1937_reduce_char_length"}
 
 
 [feature.profile.dependencies]
