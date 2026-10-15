@@ -1,9 +1,7 @@
 # %%
 import argparse
-import configparser
 import logging
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 import imod
@@ -19,99 +17,23 @@ from imod.mf6.simulation import Modflow6Simulation
 from primod import MetaMod, MetaModDriverCoupling
 
 from helpers import clip_wel_packages_to_domain
+from settings import Settings, read_settings
 
 # Loggers in python are singletons, so this is the same instance as the one used in imod.logging.pythonlogger.PythonLogger.
-imod_logger = logging.getLogger("imod")  
-
-@dataclass
-class Settings:
-    prjfile_path: Path
-    msw_dbase: Path | None
-    out_dir: Path
-    bin_dir: Path | None
-    is_steady_state: bool
-    start_date: str | None
-    end_date: str
-    interval: str
-    cellsize: float | None
-    bbox: str | None
-    model_name: str
-    overwrite: bool
-
-
-def read_settings(inifile: Path) -> Settings:
-    imod_logger.info(f"Reading settings from {inifile}")
-    config = configparser.ConfigParser(allow_unnamed_section=True)
-    config.read(inifile)
-
-    section = configparser.UNNAMED_SECTION
-
-    # Lowercase the ISS value for consistent comparison
-    iss_dict = {"steady-state": True, "transient": False, None: None}
-    iss_value = config.get(section, "ISS", fallback=None)
-    if iss_value is not None:
-        iss_value = iss_value.strip().lower()
-
-    return Settings(
-        prjfile_path=Path(config.get(section, "PRJFILE_IN")),
-        msw_dbase=Path(config.get(section, "MSW_DBASE", fallback=None)),
-        out_dir=Path(config.get(section, "OUTPUT_FOLDER")),
-        bin_dir=Path(config.get(section, "COUPLER_DIR", fallback=None)),
-        is_steady_state=iss_dict.get(iss_value),
-        start_date=config.get(section, "SDATE", fallback="1970-01-01"),
-        end_date=config.get(section, "EDATE", fallback="1970-01-02"),
-        interval=config.get(section, "INTERVAL", fallback="D"),
-        cellsize=config.getfloat(section, "CELLSIZE", fallback=None),
-        bbox=config.get(section, "WINDOW", fallback=None),
-        model_name=config.get(section, "MODELNAME", fallback="imported"),
-        overwrite=config.getboolean(section, "OVERWRITE", fallback=False),
-    )
-
-
-def validate_settings(settings: Settings) -> None:
-    imod_logger.info("Validating general settings")
-    if not settings.prjfile_path.is_file():
-        raise FileNotFoundError(f"Projectfile not found at {settings.prjfile_path}")
-    if settings.out_dir.exists():
-        if any(settings.out_dir.iterdir()) and not settings.overwrite:
-            raise FileExistsError(f"Output folder is not empty: {settings.out_dir}, please either empty it or set 'overwrite' to True.")
-    if settings.is_steady_state is None:
-        raise ValueError("Steady state setting (ISS) must be provided in the configuration. Values must be 'steady-state' or 'transient'.")
-    if settings.bin_dir is not None and not settings.bin_dir.is_dir():
-        raise FileNotFoundError(f"Coupler binaries directory not found at {settings.bin_dir}")
-    try:
-        pd.to_datetime(settings.start_date)
-        pd.to_datetime(settings.end_date)
-    except ValueError as e:
-        raise ValueError(f"Invalid date format in settings: {e}")
-    if settings.cellsize is not None and settings.cellsize <= 0:
-        raise ValueError("Cellsize must be a positive number.")
-    if (settings.bbox is not None) ^ (settings.cellsize is not None):
-        raise ValueError("Both bbox and cellsize must be provided together to create target grid.")
-
-
-def validate_msw_settings(settings: Settings) -> None:
-    imod_logger.info("Validating MetaSwap settings")
-    if settings.msw_dbase is None:
-        raise ValueError("MetaSwap database path must be provided to create MetaSwap model.")
-    if settings.bin_dir is None:
-        raise ValueError("Coupler binaries directory must be provided to create MetaSwap model.")
-
+imod_logger = logging.getLogger("imod")
 
 def create_target_grid(
-        window: str | None, 
+        window: tuple[float, float, float, float] | None, 
         cellsize: float | None
     ) -> xr.DataArray | None:
     """
     Create target grid for MODFLOW 6 simulation based on provided window and cellsize.
     """
-    imod_logger.info("Creating target grid")
     if window is None and cellsize is None:
         return None
 
-    window_tuple = tuple(map(float, window.split(",")))
-    xmin, ymin, xmax, ymax = window_tuple
-
+    imod_logger.info(f"Creating target grid with window: {window} and cellsize: {cellsize}")
+    xmin, ymin, xmax, ymax = window
     return imod.util.empty_2d(
         dx=cellsize, xmin=xmin, xmax=xmax, dy=-cellsize, ymin=ymin, ymax=ymax
     )
@@ -227,12 +149,8 @@ def convert_imod5_to_msw_model(
     msw_model = imod.msw.MetaSwapModel.from_imod5_data(imod5_data, dis_pkg, times)
     msw_model["oc"] = imod.msw.VariableOutputControl()
     msw_model.simulation_settings["unsa_svat_path"] = msw_dbase
-    msw_model.simulation_settings["vegetation_mdl"] = (
-        1  # Simple vegetation model instead of wofost
-    )
-    msw_model.simulation_settings["evapotranspiration_mdl"] = (
-        1  # Simple evapotranspiration model
-    )
+    msw_model.simulation_settings["vegetation_mdl"] = 1  # Simple vegetation model instead of wofost
+    msw_model.simulation_settings["evapotranspiration_mdl"] = 1 # Simple evapotranspiration model
     msw_model.simulation_settings["postmsw_opt"] = 0  # Turn off PostMetaSWAP output
 
     return msw_model
@@ -244,7 +162,7 @@ def import_mf6_and_msw(
     is_steady_state: bool,
     msw_dbase: Path | None,
     times: list[pd.Timestamp],
-    target_grid: xr.DataArray,
+    target_grid: xr.DataArray | None,
     model_name: str,
 ) -> tuple[Modflow6Simulation, imod.msw.MetaSwapModel | None]:
     """
@@ -279,7 +197,7 @@ def make_simulation(
     is_steady_state: bool,
     msw_dbase: Path | None,
     times: list[pd.Timestamp],
-    target_grid: xr.DataArray,
+    target_grid: xr.DataArray | None,
     model_name: str,
 ) -> MetaMod | Modflow6Simulation:
     """
@@ -340,25 +258,22 @@ def main():
     init_logging()
     try:
         # Read settings from ini file
-        settings = read_settings(args.inifile)
-        validate_settings(settings)
-        out_dir = settings.out_dir
-        bin_dir = settings.bin_dir
-        
+        settings: Settings = read_settings(args.inifile)
+                
         # Add file handler for logging to a file in the output directory
-        logfile_path = out_dir / "conversion_log.txt"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        logfile_path = settings.out_dir / "conversion_log.txt"
+        settings.out_dir.mkdir(parents=True, exist_ok=True)
         _add_filehandler(logfile_path)   
 
         # Generate list of times for simulation
-        times = pd.date_range(start=settings.start_date, end=settings.end_date, freq=settings.interval).tolist()
+        times = settings.simulation_times()
         # Create target grid
         target_grid = create_target_grid(settings.bbox, settings.cellsize)
         # Read iMOD5 project file data
         imod5_data, period_data = open_projectfile_data(settings.prjfile_path)
         has_msw = "cap" in imod5_data
         if has_msw:
-            validate_msw_settings(settings)
+            settings.validate_msw()
 
         # Create coupling object
         simulation = make_simulation(
@@ -374,17 +289,17 @@ def main():
             write_kwargs = {"binary": False}
             # Modify out_dir to point to a modflow6 subdirectory
             # so that it is consistent to what primod writes.
-            out_dir = out_dir / "modflow6"
-            out_dir.mkdir(parents=True, exist_ok=True)
+            settings.out_dir = settings.out_dir / "modflow6"
+            settings.out_dir.mkdir(parents=True, exist_ok=True)
         else:
             write_kwargs = {
-                "modflow6_dll": bin_dir/"modflow6"/"libmf6.dll",
-                "metaswap_dll": bin_dir/"metaswap"/"MetaSWAP.dll",
-                "metaswap_dll_dependency": bin_dir/"metaswap",
+                "modflow6_dll": settings.bin_dir/"modflow6"/"libmf6.dll",
+                "metaswap_dll": settings.bin_dir/"metaswap"/"MetaSWAP.dll",
+                "metaswap_dll_dependency": settings.bin_dir/"metaswap",
                 "modflow6_write_kwargs": {"binary": False},
             }
         # Write coupling to disk
-        simulation.write(out_dir, **write_kwargs)
+        simulation.write(settings.out_dir, **write_kwargs)
         # Run coupled simulation
         # simulation.run()
     except Exception:
