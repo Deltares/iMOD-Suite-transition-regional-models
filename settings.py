@@ -130,15 +130,16 @@ class Settings(BaseModel):
     @classmethod
     def _log_level_to_int(cls, v: str) -> int:
         msg = f"LOGLEVEL must be one of {list(_LOG_LEVELS.keys())}. Got: {v!r}"
-        if not isinstance(v, (str, int)):
-            raise ValueError(msg)  # noqa: TRY004
-        if isinstance(v, str) and v.lower() not in _LOG_LEVELS:
-            raise ValueError(msg)
-        if isinstance(v, int):
+        if isinstance(v, str):
+            if v.lower() not in _LOG_LEVELS:
+                raise ValueError(msg)
+            return _LOG_LEVELS[v.lower()]
+        elif isinstance(v, int):
             if v not in _LOG_LEVELS.values():
                 raise ValueError(msg)
             return v
-        return _LOG_LEVELS[v.lower()]
+        else:
+            raise ValueError(msg)  # noqa: TRY004
 
     def validate_msw(self) -> None:
         """Extra checks, only needed when creating a MetaSwap model."""
