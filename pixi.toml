@@ -27,6 +27,7 @@ rasterio = ">=1.5.0,<2"
 rioxarray = ">=0.22.0,<0.23"
 ipykernel = ">=7.2.0,<8"
 jupyter = ">=1.1.1,<2"
+pytest = ">=9.1.1,<10"
 
 [feature.github.pypi-dependencies]
 xugrid = { git = "https://github.com/Deltares/xugrid.git" }
