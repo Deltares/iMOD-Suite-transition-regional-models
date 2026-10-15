@@ -23,7 +23,18 @@ IssMode = Annotated[
     Literal["steady-state", "transient"],
     BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v),
 ]
-
+_LOG_LEVELS = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+    "10": logging.DEBUG,
+    "20": logging.INFO,
+    "30": logging.WARNING,
+    "40": logging.ERROR,
+    "50": logging.CRITICAL,
+}
 
 class Settings(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -40,6 +51,7 @@ class Settings(BaseModel):
     msw_dbase: Path | None = Field(None, alias="msw_dbase")  # existence checked in validate_msw
     bbox: tuple[float, float, float, float] | None = Field(None, alias="window")
     cellsize: float | None = Field(None, gt=0, alias="cellsize")
+    log_level: int = Field(logging.INFO, alias="loglevel")
 
     @property
     def is_steady_state(self) -> bool:
@@ -113,6 +125,20 @@ class Settings(BaseModel):
                 "please either empty it or set 'overwrite' to True."
             )
         return self
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _log_level_to_int(cls, v: str) -> int:
+        msg = f"LOGLEVEL must be one of {list(_LOG_LEVELS.keys())}. Got: {v!r}"
+        if not isinstance(v, (str, int)):
+            raise ValueError(msg)  # noqa: TRY004
+        if isinstance(v, str) and v.lower() not in _LOG_LEVELS:
+            raise ValueError(msg)
+        if isinstance(v, int):
+            if v not in _LOG_LEVELS.values():
+                raise ValueError(msg)
+            return v
+        return _LOG_LEVELS[v.lower()]
 
     def validate_msw(self) -> None:
         """Extra checks, only needed when creating a MetaSwap model."""

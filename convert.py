@@ -238,10 +238,10 @@ def init_logging() -> None:
     imod_logger.addHandler(streamhandler)
     imod_logger.info("Logging initialized.")
 
-def _add_filehandler(logfile_path: Path):
+def _add_filehandler(logfile_path: Path, log_level: int = logging.DEBUG):
     """Add a file handler to the logger for more verbose logging output."""
     filehandler = logging.FileHandler(logfile_path, mode="w")
-    filehandler.setLevel(logging.DEBUG)
+    filehandler.setLevel(log_level)
     filehandler.setFormatter(_formatter())
     imod_logger.addHandler(filehandler)
     imod_logger.info(f"More verbose logging output will be written to {logfile_path}")
@@ -259,11 +259,11 @@ def main():
     try:
         # Read settings from ini file
         settings: Settings = read_settings(args.inifile)
-                
+
         # Add file handler for logging to a file in the output directory
         logfile_path = settings.out_dir / "conversion_log.txt"
         settings.out_dir.mkdir(parents=True, exist_ok=True)
-        _add_filehandler(logfile_path)   
+        _add_filehandler(logfile_path, settings.log_level)
 
         # Generate list of times for simulation
         times = settings.simulation_times()

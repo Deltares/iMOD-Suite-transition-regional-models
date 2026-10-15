@@ -754,3 +754,48 @@ def test_simulation_times(raw: dict[str, str]) -> None:
         pd.Timestamp("2024-01-02"),
         pd.Timestamp("2024-01-03"),
     ]
+
+@pytest.mark.parametrize(
+    "log_level",
+    [
+        "invalid",
+        22,
+        22.0,
+        "33",
+    ],
+)
+def test_invalid_log_level_raises(raw: dict[str, str], log_level: str | int) -> None:
+    raw["LOGLEVEL"] = log_level
+
+    with pytest.raises(ValueError, match="LOGLEVEL must be one of"):
+        Settings.model_validate(raw)
+
+@pytest.mark.parametrize(
+    "log_level",
+    [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical",
+        "DEBUG",
+        "INFO",
+        "WARNING",
+        "ERROR",
+        "CRITICAL",
+        "10",
+        "20",   
+        "30",
+        "40",
+        "50",
+        10,
+        20,
+        30,
+        40,
+        50,
+    ],
+)
+def test_valid_log_levels(raw: dict[str, str], log_level: str) -> None:
+    raw["LOGLEVEL"] = log_level
+    settings = Settings.model_validate(raw)
+    assert isinstance(settings.log_level, int)
