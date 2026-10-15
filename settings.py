@@ -37,9 +37,7 @@ class Settings(BaseModel):
     end_date: date = Field(date(1970, 1, 2), alias="edate")
     interval: str = Field("D", alias="interval")
     bin_dir: DirectoryPath | None = Field(None, alias="coupler_dir")
-    msw_dbase: Path | None = Field(
-        None, alias="msw_dbase"
-    )  # existence checked in validate_msw
+    msw_dbase: Path | None = Field(None, alias="msw_dbase")  # existence checked in validate_msw
     bbox: tuple[float, float, float, float] | None = Field(None, alias="window")
     cellsize: float | None = Field(None, gt=0, alias="cellsize")
 
@@ -129,6 +127,10 @@ class Settings(BaseModel):
         if not self.msw_dbase.is_dir():
             raise FileNotFoundError(f"MetaSwap database not found at {self.msw_dbase}")
 
+    def simulation_times(self) -> list[pd.Timestamp]:
+        return pd.date_range(
+            start=self.start_date, end=self.end_date, freq=self.interval
+        ).tolist()
 
 def read_settings(inifile: Path | str) -> Settings:
     imod_logger.info(f"Reading settings from {inifile}")

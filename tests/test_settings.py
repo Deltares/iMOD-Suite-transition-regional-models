@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from pydantic import ValidationError
 
@@ -736,3 +737,20 @@ def test_ini_with_crlf_line_endings(tmp_path: Path, raw: dict[str, str]) -> None
     ini.write_bytes("\r\n".join(f"{k}={v}" for k, v in raw.items()).encode())
 
     assert read_settings(ini).iss == "transient"
+
+def test_simulation_times(raw: dict[str, str]) -> None:
+    raw.update(
+        {
+            "SDATE": "2024-01-01",
+            "EDATE": "2024-01-03",
+            "INTERVAL": "1D",
+        }
+    )
+
+    settings = Settings.model_validate(raw)
+    times = settings.simulation_times()
+    assert times == [
+        pd.Timestamp("2024-01-01"),
+        pd.Timestamp("2024-01-02"),
+        pd.Timestamp("2024-01-03"),
+    ]
