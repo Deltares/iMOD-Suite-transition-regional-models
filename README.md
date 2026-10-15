@@ -79,6 +79,7 @@ Arguments supported:
 | `MSW_DBASE` | No* | None | Directory path (string) | Path to the MetaSWAP database directory used during conversion. |
 | `WINDOW` | No** | `None` | Comma-separated numbers | Spatial extent as `xmin,ymin,xmax,ymax` in model coordinates. |
 | `CELLSIZE` | No** | `None` | Number (integer/float) | Target horizontal grid cell size (typically in meters). |
+| `LOGLEVEL` | NO | `DEBUG` | Number (integer) or string. | The level of verbosity in the log file, choose from [`DEBUG`/`10`, `INFO`/`20`, `WARNING`/`30`, `ERROR`/`40`, `CRITICAL`/`50`] |
 
 \* Only required when there is CAP entry in the projectfile for MetaSWAP.
 
