@@ -1,6 +1,7 @@
 # %%
 import argparse
 import logging
+import shutil
 import sys
 from pathlib import Path
 
@@ -259,10 +260,14 @@ def main():
     try:
         # Read settings from ini file
         settings: Settings = read_settings(args.inifile)
+        
+        # Remove existing output directory if overwrite is enabled
+        if settings.overwrite and settings.out_dir.is_dir():
+            shutil.rmtree(settings.out_dir, ignore_errors=True)
+        settings.out_dir.mkdir(parents=True, exist_ok=True)
 
         # Add file handler for logging to a file in the output directory
         logfile_path = settings.out_dir / "conversion_log.txt"
-        settings.out_dir.mkdir(parents=True, exist_ok=True)
         _add_filehandler(logfile_path, settings.log_level)
 
         # Generate list of times for simulation
