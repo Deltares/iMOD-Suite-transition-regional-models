@@ -7,7 +7,7 @@ import imod
 import numpy as np
 import shapely
 
-from convert import imod_logger, init_logging
+from logging_helpers import imod_logger, init_logging
 
 
 def read_gen_file(genfile_path: Path) -> gpd.GeoDataFrame:

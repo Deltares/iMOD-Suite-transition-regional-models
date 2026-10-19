@@ -1,27 +1,20 @@
 # %%
 import argparse
-import logging
 import shutil
-import sys
 from pathlib import Path
 
 import imod
 import pandas as pd
 import xarray as xr
 from imod.formats.prj.prj import open_projectfile_data
-from imod.logging.config import LoggerType
-from imod.logging.loglevel import LogLevel
-from imod.logging.pythonlogger import _formatter
 from imod.mf6.ims import Solution
 from imod.mf6.oc import OutputControl
 from imod.mf6.simulation import Modflow6Simulation
 from primod import MetaMod, MetaModDriverCoupling
 
 from helpers import clip_wel_packages_to_domain
+from logging_helpers import add_filehandler, imod_logger, init_logging
 from settings import Settings, read_settings
-
-# Loggers in python are singletons, so this is the same instance as the one used in imod.logging.pythonlogger.PythonLogger.
-imod_logger = logging.getLogger("imod")
 
 def create_target_grid(
         window: tuple[float, float, float, float] | None, 
@@ -224,30 +217,6 @@ def make_simulation(
     )
 
 
-def init_logging() -> None:
-    """Initialize logging with stream handler."""
-    imod.logging.configure(
-        LoggerType.PYTHON,
-        log_level=LogLevel.DEBUG,
-        add_default_file_handler=False,
-        add_default_stream_handler=False,
-    )
-    # Add streamhandler
-    streamhandler = logging.StreamHandler(sys.stdout)
-    streamhandler.setLevel(logging.INFO)
-    streamhandler.setFormatter(_formatter())
-    imod_logger.addHandler(streamhandler)
-    imod_logger.info("Logging initialized.")
-
-def _add_filehandler(logfile_path: Path, log_level: int = logging.INFO):
-    """Add a file handler with the specified log level to the logger."""
-    filehandler = logging.FileHandler(logfile_path, mode="w")
-    filehandler.setLevel(log_level)
-    filehandler.setFormatter(_formatter())
-    imod_logger.addHandler(filehandler)
-    imod_logger.info(f"More verbose logging output will be written to {logfile_path}")
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Convert iMOD5 project to MODFLOW 6 and MetaSwap simulation")
     parser.add_argument("inifile", type=Path, help="Path to the ini file with settings")
@@ -268,7 +237,7 @@ def main():
 
         # Add file handler for logging to a file in the output directory
         logfile_path = settings.out_dir / "conversion_log.txt"
-        _add_filehandler(logfile_path, settings.log_level)
+        add_filehandler(logfile_path, settings.log_level)
 
         # Generate list of times for simulation
         times = settings.simulation_times()
