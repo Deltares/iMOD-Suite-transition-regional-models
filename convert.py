@@ -239,8 +239,8 @@ def init_logging() -> None:
     imod_logger.addHandler(streamhandler)
     imod_logger.info("Logging initialized.")
 
-def _add_filehandler(logfile_path: Path, log_level: int = logging.DEBUG):
-    """Add a file handler to the logger for more verbose logging output."""
+def _add_filehandler(logfile_path: Path, log_level: int = logging.INFO):
+    """Add a file handler with the specified log level to the logger."""
     filehandler = logging.FileHandler(logfile_path, mode="w")
     filehandler.setLevel(log_level)
     filehandler.setFormatter(_formatter())

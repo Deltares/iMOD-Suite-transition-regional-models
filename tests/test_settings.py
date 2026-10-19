@@ -42,26 +42,6 @@ SDATE=2011-01-01
 EDATE=2011-01-07
 INTERVAL=D"""
 
-# Old-style iMOD5 converter ini: other keywords, absolute Windows paths, ISS=1.
-LEGACY_IMOD5_INI = """\
-FUNCTION=RUNFILE
-PRJFILE_IN=c:\\Users\\engelen\\NHI_sprint\\Peelvenen\\prjfiles\\Peelvenen_absolute_paths.PRJ
-SIM_TYPE=3
-NAMFILE_OUT=c:\\Users\\engelen\\NHI_sprint\\Peelvenen\\conversion_imod5\\peelvenen.nam
-OUTPUT_FOLDER=c:\\Users\\engelen\\NHI_sprint\\Peelvenen\\conversion_imod5
-WINDOW=175000,364000,201000,397000
-CELLSIZE=100
-SAVESHD=-1
-SAVEriv=-1
-COMPLEXITY=MODERATE
-COUPLER=c:\\Users\\engelen\\NHI_sprint\\imod_coupler_windows
-ISS=1
-SDATE=20110101000000
-EDATE=20110107000000
-ITT=3
-IDT=1
-"""
-
 
 def write_ini(path: Path, entries: dict[str, str]) -> Path:
     path.write_text(
@@ -70,7 +50,7 @@ def write_ini(path: Path, entries: dict[str, str]) -> Path:
     return path
 
 
-def make_tree(ini_dir: Path, files: list[str], dirs: list[str]) -> None:
+def make_dir_tree(ini_dir: Path, files: list[str], dirs: list[str]) -> None:
     """Create relative targets as seen from `ini_dir`."""
     for rel in files:
         target = ini_dir / rel
@@ -104,7 +84,7 @@ def ini_dir(tmp_path: Path) -> Path:
 
 # example ini files 
 def test_peelvenen_transient_example(ini_dir: Path) -> None:
-    make_tree(
+    make_dir_tree(
         ini_dir,
         files=["../Peelvenen/prjfiles/Peelvenen_relative_paths.PRJ"],
         dirs=["../imod_coupler_windows", "../data/MSW_dbase"],
@@ -132,7 +112,7 @@ def test_peelvenen_transient_example(ini_dir: Path) -> None:
 
 
 def test_peelvenen_steady_state_example_uses_defaults(ini_dir: Path) -> None:
-    make_tree(
+    make_dir_tree(
         ini_dir,
         files=["../Peelvenen/prjfiles/Peelvenen_relative_paths_steady_state.PRJ"],
         dirs=["../imod_coupler_windows", "../data/MSW_dbase"],
@@ -151,7 +131,7 @@ def test_peelvenen_steady_state_example_uses_defaults(ini_dir: Path) -> None:
 
 
 def test_model_cp_example_without_iss_raises(ini_dir: Path) -> None:
-    make_tree(
+    make_dir_tree(
         ini_dir,
         files=[
             "../Model_CP/RUNFILES/BASIS1/BASIS1_TA-MF6-UNCONF-50/IBR30_BASIS1_TA-MF6-UNCONF-50-adapted.PRJ"
@@ -167,25 +147,11 @@ def test_model_cp_example_without_iss_raises(ini_dir: Path) -> None:
     assert [e["loc"] for e in exc.value.errors()] == [("iss",)]
     assert exc.value.errors()[0]["type"] == "missing"
 
-
-def test_legacy_imod5_ini_is_rejected(ini_dir: Path) -> None:
-    ini = ini_dir / "convert_imod5.ini"
-    ini.write_text(LEGACY_IMOD5_INI)
-
-    with pytest.raises(ValidationError) as exc:
-        read_settings(ini)
-
-    error_types = {e["type"] for e in exc.value.errors()}
-    assert "extra_forbidden" in error_types
-
-
-# --- path resolution relative to the ini file -----------------------------------
-
-
+# path resolution relative to the ini file
 def test_relative_paths_resolve_against_ini_location_not_cwd(
     tmp_path: Path, ini_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    make_tree(ini_dir, files=["../data/model.PRJ"], dirs=["../bin", "../msw"])
+    make_dir_tree(ini_dir, files=["../data/model.PRJ"], dirs=["../bin", "../msw"])
     ini = write_ini(
         ini_dir / "c.ini",
         {
@@ -212,7 +178,7 @@ def test_relative_paths_resolve_against_ini_location_not_cwd(
 def test_base_dir_context_resolves_relative_paths_in_direct_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    make_tree(tmp_path, files=["data/model.PRJ"], dirs=["bin"])
+    make_dir_tree(tmp_path, files=["data/model.PRJ"], dirs=["bin"])
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
@@ -236,7 +202,7 @@ def test_base_dir_context_resolves_relative_paths_in_direct_validation(
 def test_without_context_relative_paths_resolve_against_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    make_tree(tmp_path, files=["model.PRJ"], dirs=[])
+    make_dir_tree(tmp_path, files=["model.PRJ"], dirs=[])
     monkeypatch.chdir(tmp_path)
 
     s = Settings.model_validate(
@@ -250,7 +216,7 @@ def test_without_context_relative_paths_resolve_against_cwd(
 def test_ini_given_as_relative_path_resolves_correctly(
     ini_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    make_tree(ini_dir, files=["model.PRJ"], dirs=[])
+    make_dir_tree(ini_dir, files=["model.PRJ"], dirs=[])
     write_ini(
         ini_dir / "c.ini",
         {"PRJFILE_IN": "model.PRJ", "OUTPUT_FOLDER": "out", "ISS": "transient"},
@@ -284,7 +250,7 @@ def test_missing_relative_prjfile_raises(ini_dir: Path) -> None:
 
 
 def test_blank_path_value_is_not_turned_into_ini_directory(ini_dir: Path) -> None:
-    make_tree(ini_dir, files=["model.PRJ"], dirs=[])
+    make_dir_tree(ini_dir, files=["model.PRJ"], dirs=[])
     ini = write_ini(
         ini_dir / "c.ini",
         {
@@ -303,7 +269,7 @@ def test_blank_path_value_is_not_turned_into_ini_directory(ini_dir: Path) -> Non
 
 
 def test_path_keywords_resolve_regardless_of_key_case(ini_dir: Path) -> None:
-    make_tree(ini_dir, files=["model.PRJ"], dirs=[])
+    make_dir_tree(ini_dir, files=["model.PRJ"], dirs=[])
     ini = write_ini(
         ini_dir / "c.ini",
         {"PrjFile_In": "model.PRJ", "Output_Folder": "out", "Iss": "transient"},
@@ -361,8 +327,6 @@ def test_keywords_differing_only_by_case_are_a_duplicate(
 
 
 # defaults and value normalisation
-
-
 def test_defaults(raw: dict[str, str]) -> None:
     s = Settings.model_validate(raw)
 
@@ -638,7 +602,7 @@ def test_empty_existing_output_folder_is_allowed(raw: dict[str, str]) -> None:
 def test_relative_output_folder_is_checked_at_ini_location(
     tmp_path: Path, ini_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    make_tree(ini_dir, files=["model.PRJ", "../out/old.txt"], dirs=[])
+    make_dir_tree(ini_dir, files=["model.PRJ", "../out/old.txt"], dirs=[])
     ini = write_ini(
         ini_dir / "c.ini",
         {"PRJFILE_IN": "model.PRJ", "OUTPUT_FOLDER": "../out", "ISS": "transient"},

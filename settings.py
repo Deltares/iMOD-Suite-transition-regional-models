@@ -21,8 +21,10 @@ imod_logger = logging.getLogger("imod")
 
 IssMode = Annotated[
     Literal["steady-state", "transient"],
-    BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v),
+    BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v), # normalize input to lowercase and strip whitespace
 ]
+"""IssMode represents the mode of the simulation: either 'steady-state' or 'transient'."""
+
 _LOG_LEVELS = {
     "debug": logging.DEBUG,
     "info": logging.INFO,
