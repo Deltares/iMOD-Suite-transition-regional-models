@@ -1,4 +1,5 @@
 # %%
+"""GENPUZZLE script for connecting loose line segments in a GEN file into continuous segments."""
 import argparse
 from pathlib import Path
 
@@ -86,6 +87,7 @@ def genpuzzle(
 
 
 def parse_args():
+    """Parse command-line arguments for the GENPUZZLE script."""
     parser = argparse.ArgumentParser(
         description="Connect loose line segments in a GEN file into continuous segments"
     )
@@ -101,6 +103,7 @@ def parse_args():
 
 
 def main():
+    """Main function for the GENPUZZLE script."""
     args = parse_args()
     init_logging()
     try:
