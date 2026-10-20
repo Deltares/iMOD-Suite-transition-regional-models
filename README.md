@@ -96,13 +96,13 @@ This is the equivalent of the GENPUZZLE batch function in iMOD5. In addition the
 If you installed with pixi:
 
 ```powershell
-pixi run genpuzzle <input GEN file> <output GEN file> [--tolerance <map units>]
+pixi run genpuzzle <GENFILE_IN> <GENFILE_OUT> [--tolerance <map units>]
 ```
 
 For example:
 
 ```powershell
-pixi run genpuzzle rivers.gen rivers_connected.gen --tolerance 0.0001
+pixi run genpuzzle example.gen example_connected.gen --tolerance 0.1
 ```
 
 If you followed the offline installation instructions, the commands are slightly
@@ -110,7 +110,7 @@ different:
 
 ```powershell
 .\activate.bat
-python genpuzzle.py <input GEN file> <output GEN file> [--tolerance <map units>]
+python genpuzzle.py <GENFILE_IN> <GENFILE_OUT> [--tolerance <map units>]
 ```
 
 ### Configuration
@@ -119,6 +119,6 @@ Arguments supported:
 
 | Argument | Required | Default/Fallback | Datatype | Brief explanation |
 | --- | --- | --- | --- | --- |
-| `genfile_in` | Yes | None | Path (string) | Path to the input GEN file. |
-| `genfile_out` | Yes | None | Path (string) | Path where the output GEN file will be written. |
-| `--tolerance` | No | `0.0001` | Number (float) | Maximum distance in map units within which line endpoints are snapped together. |
+| `GENFILE_IN` | Yes | None | Path (string) | Path to the input GEN file. |
+| `GENFILE_OUT` | Yes | None | Path (string) | Path where the output GEN file will be written. |
+| `tolerance` | No | `0.0001` | Number (float) | Maximum distance in map units within which line endpoints are snapped together. |
