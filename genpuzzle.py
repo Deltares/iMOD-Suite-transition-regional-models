@@ -11,6 +11,8 @@ import xugrid as xu
 
 from logging_helpers import imod_logger, init_logging
 
+DEFAULT_TOLERANCE = 0.0001
+
 
 def read_gen_file(genfile_path: Path) -> gpd.GeoDataFrame:
     """
@@ -69,7 +71,7 @@ def merge_lines(lines: np.ndarray) -> np.ndarray:
 
 
 def genpuzzle(
-    genfile_in: Path, genfile_out: Path, tolerance: float
+    genfile_in: Path, genfile_out: Path, tolerance: float = DEFAULT_TOLERANCE
 ) -> gpd.GeoDataFrame:
     """
     Connect loose line segments in a GEN file into continuous segments, following 
@@ -96,8 +98,8 @@ def parse_args():
     parser.add_argument(
         "--tolerance",
         type=float,
-        default=0.0001,
-        help="Snapping tolerance in map units (default: 0.0001)",
+        default=DEFAULT_TOLERANCE,
+        help=f"Snapping tolerance in map units (default: {DEFAULT_TOLERANCE})",
     )
     return parser.parse_args()
 
