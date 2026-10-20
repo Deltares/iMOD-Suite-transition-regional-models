@@ -14,14 +14,18 @@ imod_logger = logging.getLogger("imod")
 
 
 def init_logging() -> None:
-    """Initialize logging with stream handler."""
+    """Initialize logging with one console handler, preserving file handlers."""
     imod.logging.configure(
         LoggerType.PYTHON,
         log_level=LogLevel.DEBUG,
         add_default_file_handler=False,
         add_default_stream_handler=False,
     )
-    # Add streamhandler
+    # FileHandler also inherits from StreamHandler; keep file logging intact.
+    for handler in imod_logger.handlers[:]:
+        if type(handler) is logging.StreamHandler:
+            imod_logger.removeHandler(handler)
+            handler.close()
     streamhandler = logging.StreamHandler(sys.stdout)
     streamhandler.setLevel(logging.INFO)
     streamhandler.setFormatter(_formatter())
