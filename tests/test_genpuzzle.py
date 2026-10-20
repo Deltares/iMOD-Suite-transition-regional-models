@@ -53,29 +53,42 @@ def test_tolerance_controls_snapping(tmp_path: Path) -> None:
     assert len(large) == 9
 
 
-def _plot_lines(ax, gdf: gpd.GeoDataFrame, title: str) -> None:
-    for line in gdf.geometry:
-        x, y = zip(*line.coords)
-        ax.plot(x, y, "-o", markersize=3)
-    ax.set_title(f"{title} ({len(gdf)} lines)")
-    ax.set_aspect("equal")
-    ax.grid(alpha=0.3)
+PLOT_TEST_CASES = [
+    ("Exact joins", (30, 5), (0, 5)),
+    ("Larger gap", (21.5, 25), (0, 30)),
+    ("Converging line", (20, 50), (0, 56)),
+    ("Isolated line", (70, 20), (53, 43)),
+    ("Floating point precision", (20, 75), (0, 83)),
+    ("Three-way junction", (60, 65), (43, 87)),
+    ("0.0001 gap", (20, 90), (0, 97)),
+]
 
 
 def test_plot_comparison(
     genpuzzle_out: gpd.GeoDataFrame, imod5_out: gpd.GeoDataFrame
 ) -> None:
     """Plot a comparison of the input, genpuzzle output, and iMOD5 output."""
-    input_gdf = imod.formats.gen.read(GENFILE_IN)
     panels = [
-        ("Input", input_gdf),
+        (GENFILE_IN.name, imod.formats.gen.read(GENFILE_IN)),
         ("genpuzzle output", genpuzzle_out),
-        ("iMOD5 output", imod5_out),
+        (IMOD5_OUT.name, imod5_out),
     ]
-    fig = Figure(figsize=(10, 4.5), layout="constrained")
+    fig = Figure(figsize=(3.3 * len(panels), 5))
     axes = fig.subplots(1, len(panels), sharex=True, sharey=True)
-    for ax, (title, gdf) in zip(axes, panels):
-        _plot_lines(ax, gdf, title)
-    fig.suptitle(f"GENPUZZLE comparison")
-    fig.savefig(FIGURE_OUT, dpi=150)
+    for ax, (name, gdf) in zip(axes, panels):
+        labels = gdf.get("id", gdf.index.to_series())
+        gdf.plot(ax=ax, column=labels, cmap="tab10", linewidth=2)
+        for line in gdf.geometry:
+            (x0, y0), (x1, y1) = line.coords[0], line.coords[-1]
+            ax.plot([x0, x1], [y0, y1], "ko", markersize=4)
+        ax.set_title(f"{name} ({len(gdf)} lines)")
+        ax.set_aspect("equal")
+        ax.grid(alpha=0.3)
+
+    for label, point, text_position in PLOT_TEST_CASES:
+        axes[0].annotate(label, xy=point, xytext=text_position, fontsize=8)
+    axes[0].set_ylim(-15, 110)
+
+    fig.tight_layout(pad=0.5, w_pad=0.5)
+    fig.savefig(FIGURE_OUT, dpi=150, bbox_inches="tight")
     assert FIGURE_OUT.exists()
