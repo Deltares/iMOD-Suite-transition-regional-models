@@ -14,7 +14,7 @@ from scipy.sparse.csgraph import connected_components
 
 from logging_helpers import imod_logger, init_logging
 
-DEFAULT_TOLERANCE = 0.0001
+DEFAULT_TOLERANCE = 0.001
 
 
 def read_gen_file(genfile_path: Path) -> gpd.GeoDataFrame:
@@ -28,9 +28,9 @@ def read_gen_file(genfile_path: Path) -> gpd.GeoDataFrame:
 
 def snap_loose_ends(
     lines: np.ndarray, tolerance: float
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray | None]:
     """
-    Snap nearby line endpoints and return the lines with their endpoint node IDs.
+    Return snapped lines and endpoint node IDs, or None if no snapping occurred.
     """
     imod_logger.info(f"Snapping {len(lines)} lines with tolerance: {tolerance}")
     n_lines = len(lines)
@@ -47,7 +47,8 @@ def snap_loose_ends(
         endpoints_xy[:, 0], endpoints_xy[:, 1], tolerance
     )
     if endpoint_to_node is None:
-        return lines, np.arange(2 * n_lines).reshape(2, n_lines).T
+        return lines, None
+
     snapped_xy = np.column_stack([x_snapped, y_snapped])[endpoint_to_node]
 
     # Update the coordinates of the line endpoints with the snapped positions
@@ -77,26 +78,38 @@ def _pair_lines(endpoint_nodes: np.ndarray) -> np.ndarray:
     return np.array(pairs, dtype=int).reshape(-1, 2)
 
 
-def merge_lines(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.ndarray:
-    """
-    Merge snapped lines, pairing branches in file order at junctions.
-    """
+def _merge_with_junctions(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.ndarray:
+    """Merge a network containing junctions, pairing branches in file order."""
+    # Select which lines connect at each endpoint node.
     line_pairs = _pair_lines(endpoint_nodes)
     n_lines = len(lines)
 
-    connections = np.ones(len(line_pairs))
-    first_lines = line_pairs[:, 0]
-    second_lines = line_pairs[:, 1]
+    # Build a graph with one vertex per line and one edge per selected pair.
+    first_lines, second_lines = line_pairs.T
     line_graph = coo_matrix(
-        (connections, (first_lines, second_lines)),
+        (np.ones(len(line_pairs)), (first_lines, second_lines)),
         shape=(n_lines, n_lines),
     )
 
+    # Identify groups connected through one or more pairs.
     _, group_ids = connected_components(line_graph, directed=False)
+    # Collect each group's geometries and merge their connected segments.
     grouped_lines = shapely.multilinestrings(lines, indices=group_ids)
-    merged_lines = shapely.line_merge(grouped_lines)
+    return shapely.line_merge(grouped_lines)
 
-    imod_logger.info(f"Merged {n_lines} lines into {len(merged_lines)} segments")
+
+def merge_lines(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.ndarray:
+    """Merge chains directly, using file-order pairing when junctions exist."""
+    node_counts = np.bincount(endpoint_nodes.ravel())
+    if np.any(node_counts > 2):
+        # Note: For some reason, all the nodes need to be passed otherwise 
+        # we lose the xugrid ids of what is connected
+        merged_lines = _merge_with_junctions(lines, endpoint_nodes)
+    else:
+        merged = shapely.line_merge(shapely.multilinestrings(lines))
+        merged_lines = shapely.get_parts(merged)
+
+    imod_logger.info(f"Merged {len(lines)} lines into {len(merged_lines)} segments")
     return merged_lines
 
 
@@ -110,8 +123,11 @@ def genpuzzle(
     gdf = read_gen_file(genfile_in)
     lines = gdf.geometry.to_numpy()
     snapped, endpoint_nodes = snap_loose_ends(lines, tolerance)
-    merged = merge_lines(snapped, endpoint_nodes)
-    gdf_out = gpd.GeoDataFrame(geometry=merged, crs=gdf.crs)
+    if endpoint_nodes is None:
+        merged = snapped
+    else:
+        merged = merge_lines(snapped, endpoint_nodes)
+    gdf_out = gpd.GeoDataFrame(geometry=merged)
     imod_logger.info(f"Writing GEN file: {genfile_out}")
     genfile_out.parent.mkdir(parents=True, exist_ok=True)
     imod.formats.gen.write(genfile_out, gdf_out)
