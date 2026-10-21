@@ -1,6 +1,7 @@
 # %%
 """GENPUZZLE script for connecting loose line segments in a GEN file into continuous segments."""
 import argparse
+from collections import defaultdict
 from pathlib import Path
 
 import geopandas as gpd
@@ -62,49 +63,18 @@ def snap_loose_ends(
     )
 
 
-def _pair_junctions(node_ids: np.ndarray, endpoint_indices: np.ndarray) -> np.ndarray:
-    """Pair junction endpoints in file order, leaving any odd endpoint unpaired."""
-    lines_by_node = {}
-    for endpoint in endpoint_indices:
-        lines_by_node.setdefault(node_ids[endpoint], []).append(endpoint // 2)
-
-    pairs = [
-        pair
-        for lines in lines_by_node.values()
-        for pair in zip(lines[::2], lines[1::2])
-    ]
-    return np.array(pairs, dtype=int).reshape(-1, 2)
-
-
 def _pair_lines(endpoint_nodes: np.ndarray) -> np.ndarray:
     """Pair lines at each node in file order, leaving any odd line unpaired."""
-    node_ids = endpoint_nodes.ravel()
-    n_endpoints = node_ids.size
-    if n_endpoints == 0:
-        return np.empty((0, 2), dtype=int)
+    lines_by_node = defaultdict(list)
+    for line_index, nodes in enumerate(endpoint_nodes):
+        for node in nodes:
+            lines_by_node[node].append(line_index)
 
-    node_counts = np.bincount(node_ids)
+    pairs = []
+    for line_indices in lines_by_node.values():
+        pairs.extend(zip(line_indices[::2], line_indices[1::2]))
 
-    # Find the first and last endpoint at each node without sorting.
-    endpoint_indices = np.arange(n_endpoints)
-    first_endpoint = np.full(node_counts.size, n_endpoints, dtype=int)
-    last_endpoint = np.full(node_counts.size, -1, dtype=int)
-    np.minimum.at(first_endpoint, node_ids, endpoint_indices)
-    np.maximum.at(last_endpoint, node_ids, endpoint_indices)
-
-    # Get line index
-    paired_nodes = np.flatnonzero(node_counts == 2)
-    pairs = np.column_stack(
-        (first_endpoint[paired_nodes], last_endpoint[paired_nodes])
-    ) // 2
-
-    # If there are junction endpoints, pair them separately.
-    junction_endpoints = np.flatnonzero(node_counts[node_ids] > 2)
-    if junction_endpoints.size == 0:
-        return pairs
-
-    junction_pairs = _pair_junctions(node_ids, junction_endpoints)
-    return np.concatenate((pairs, junction_pairs))
+    return np.array(pairs, dtype=int).reshape(-1, 2)
 
 
 def merge_lines(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.ndarray:
