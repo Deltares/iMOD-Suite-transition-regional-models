@@ -5,7 +5,6 @@ from pathlib import Path
 import geopandas as gpd
 import imod
 import pytest
-import shapely
 from matplotlib.figure import Figure
 
 from genpuzzle import genpuzzle
@@ -15,12 +14,10 @@ GENFILE_IN = DATA_DIR / "genpuzzle_test.gen"
 IMOD5_OUT = DATA_DIR / "out_imod5.gen"
 FIGURE_OUT = DATA_DIR / "genpuzzle_comparison.png"
 
-THREE_WAY_JUNCTION = (60.0, 65.0)
 
-
-def _without_three_way_junction(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    # Temporary: remove once the three-way junction behaviour is included correctly. 
-    return gdf[~gdf.geometry.intersects(shapely.Point(THREE_WAY_JUNCTION))]
+def _sorted_coordinates(gdf: gpd.GeoDataFrame) -> list[tuple]:
+    """Return the vertices of each line in order, with the lines sorted."""
+    return sorted(tuple(line.coords) for line in gdf.geometry)
 
 
 @pytest.fixture(scope="module")
@@ -35,22 +32,19 @@ def imod5_out() -> gpd.GeoDataFrame:
     return imod.formats.gen.read(IMOD5_OUT)
 
 
-def test_output_matches_imod5_without_three_way_junction(
+def test_output_matches_imod5(
     genpuzzle_out: gpd.GeoDataFrame, imod5_out: gpd.GeoDataFrame
 ) -> None:
-    actual = _without_three_way_junction(genpuzzle_out)
-    expected = _without_three_way_junction(imod5_out)
-    actual_lines = sorted(tuple(line.coords) for line in actual.geometry)
-    expected_lines = sorted(tuple(line.coords) for line in expected.geometry)
-    assert actual_lines == expected_lines
+    """Regression test: genpuzzle output matches the GENPUZZLE output of iMOD5."""
+    assert _sorted_coordinates(genpuzzle_out) == _sorted_coordinates(imod5_out)
 
 
 def test_tolerance_controls_snapping(tmp_path: Path) -> None:
     small = genpuzzle(GENFILE_IN, tmp_path / "small.gen", tolerance=0.0001)
     large = genpuzzle(GENFILE_IN, tmp_path / "large.gen", tolerance=3.0)
 
-    assert len(small) == 10
-    assert len(large) == 9
+    assert len(small) == 9
+    assert len(large) == 8
 
 
 PLOT_TEST_CASES = [

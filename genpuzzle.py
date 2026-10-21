@@ -8,6 +8,8 @@ import imod
 import numpy as np
 import shapely
 import xugrid as xu
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 
 from logging_helpers import imod_logger, init_logging
 
@@ -25,9 +27,9 @@ def read_gen_file(genfile_path: Path) -> gpd.GeoDataFrame:
 
 def snap_loose_ends(
     lines: np.ndarray, tolerance: float
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Snap line endpoints within tolerance of each other onto a single node.
+    Snap nearby line endpoints and return the lines with their endpoint node IDs.
     """
     imod_logger.info(f"Snapping {len(lines)} lines with tolerance: {tolerance}")
     n_lines = len(lines)
@@ -44,7 +46,7 @@ def snap_loose_ends(
         endpoints_xy[:, 0], endpoints_xy[:, 1], tolerance
     )
     if endpoint_to_node is None:
-        return lines
+        return lines, np.arange(2 * n_lines).reshape(2, n_lines).T
     snapped_xy = np.column_stack([x_snapped, y_snapped])[endpoint_to_node]
 
     # Update the coordinates of the line endpoints with the snapped positions
@@ -54,20 +56,78 @@ def snap_loose_ends(
     first = last - n_coords + 1
     coords[first] = snapped_xy[:n_lines]
     coords[last] = snapped_xy[n_lines:]
-    return shapely.set_coordinates(lines.copy(), coords)
-
-
-def merge_lines(lines: np.ndarray) -> np.ndarray:
-    """
-    Merge snapped lines that share endpoints into continuous linestrings.
-    """
-    imod_logger.info("Merging snapped lines into continuous segments")
-    merged = shapely.line_merge(shapely.multilinestrings(lines))
-    merged_parts = shapely.get_parts(merged)
-    imod_logger.info(
-        f"Merged {len(lines)} lines into {len(merged_parts)} segments"
+    return (
+        shapely.set_coordinates(lines.copy(), coords),
+        endpoint_to_node.reshape(2, n_lines).T,
     )
-    return merged_parts
+
+
+def _pair_junctions(node_ids: np.ndarray, endpoint_indices: np.ndarray) -> np.ndarray:
+    """Pair junction endpoints in file order, leaving any odd endpoint unpaired."""
+    lines_by_node = {}
+    for endpoint in endpoint_indices:
+        lines_by_node.setdefault(node_ids[endpoint], []).append(endpoint // 2)
+
+    pairs = [
+        pair
+        for lines in lines_by_node.values()
+        for pair in zip(lines[::2], lines[1::2])
+    ]
+    return np.array(pairs, dtype=int).reshape(-1, 2)
+
+
+def _pair_lines(endpoint_nodes: np.ndarray) -> np.ndarray:
+    """Pair lines at each node in file order, leaving any odd line unpaired."""
+    node_ids = endpoint_nodes.ravel()
+    n_endpoints = node_ids.size
+    if n_endpoints == 0:
+        return np.empty((0, 2), dtype=int)
+
+    node_counts = np.bincount(node_ids)
+
+    # Find the first and last endpoint at each node without sorting.
+    endpoint_indices = np.arange(n_endpoints)
+    first_endpoint = np.full(node_counts.size, n_endpoints, dtype=int)
+    last_endpoint = np.full(node_counts.size, -1, dtype=int)
+    np.minimum.at(first_endpoint, node_ids, endpoint_indices)
+    np.maximum.at(last_endpoint, node_ids, endpoint_indices)
+
+    # Get line index
+    paired_nodes = np.flatnonzero(node_counts == 2)
+    pairs = np.column_stack(
+        (first_endpoint[paired_nodes], last_endpoint[paired_nodes])
+    ) // 2
+
+    # If there are junction endpoints, pair them separately.
+    junction_endpoints = np.flatnonzero(node_counts[node_ids] > 2)
+    if junction_endpoints.size == 0:
+        return pairs
+
+    junction_pairs = _pair_junctions(node_ids, junction_endpoints)
+    return np.concatenate((pairs, junction_pairs))
+
+
+def merge_lines(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.ndarray:
+    """
+    Merge snapped lines, pairing branches in file order at junctions.
+    """
+    line_pairs = _pair_lines(endpoint_nodes)
+    n_lines = len(lines)
+
+    connections = np.ones(len(line_pairs))
+    first_lines = line_pairs[:, 0]
+    second_lines = line_pairs[:, 1]
+    line_graph = coo_matrix(
+        (connections, (first_lines, second_lines)),
+        shape=(n_lines, n_lines),
+    )
+
+    _, group_ids = connected_components(line_graph, directed=False)
+    grouped_lines = shapely.multilinestrings(lines, indices=group_ids)
+    merged_lines = shapely.line_merge(grouped_lines)
+
+    imod_logger.info(f"Merged {n_lines} lines into {len(merged_lines)} segments")
+    return merged_lines
 
 
 def genpuzzle(
@@ -79,8 +139,8 @@ def genpuzzle(
     """
     gdf = read_gen_file(genfile_in)
     lines = gdf.geometry.to_numpy()
-    snapped = snap_loose_ends(lines, tolerance)
-    merged = merge_lines(snapped)
+    snapped, endpoint_nodes = snap_loose_ends(lines, tolerance)
+    merged = merge_lines(snapped, endpoint_nodes)
     gdf_out = gpd.GeoDataFrame(geometry=merged, crs=gdf.crs)
     imod_logger.info(f"Writing GEN file: {genfile_out}")
     genfile_out.parent.mkdir(parents=True, exist_ok=True)
