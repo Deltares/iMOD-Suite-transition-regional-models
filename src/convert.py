@@ -17,7 +17,7 @@ from imod.mf6.oc import OutputControl
 from imod.mf6.simulation import Modflow6Simulation
 from primod import MetaMod, MetaModDriverCoupling
 
-from helpers import clip_wel_packages_to_domain
+from clipping import clip_wel_packages_to_domain
 from settings import ConvertSettings, read_convert_settings
 
 # Loggers in python are singletons, so this is the same instance as the one used in imod.logging.pythonlogger.PythonLogger.
