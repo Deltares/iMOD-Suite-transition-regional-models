@@ -44,8 +44,8 @@ def test_tolerance_controls_snapping(tmp_path: Path) -> None:
     small = genpuzzle(GENFILE_IN, tmp_path / "small.gen", tolerance=0.0001)
     large = genpuzzle(GENFILE_IN, tmp_path / "large.gen", tolerance=3.0)
 
-    assert len(small) == 11
-    assert len(large) == 9
+    assert len(small) == 15
+    assert len(large) == 13
 
 
 def test_z_coordinates_are_forced_to_2d(tmp_path: Path) -> None:

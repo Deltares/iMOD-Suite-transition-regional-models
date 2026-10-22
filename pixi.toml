@@ -7,7 +7,7 @@ version = "0.1.0"
 
 [tasks]
 convert = {cmd = "python src/convert.py", description = "Convert iMOD5 data to MODFLOW 6 and MetaSwap model."}
-genpuzzle = {cmd = "python genpuzzle.py", description = "Create a GEN file, where all loose ends are connected to form a continuous segment"}
+genpuzzle = {cmd = "python src/genpuzzle.py", description = "Create a GEN file, where all loose ends are connected to form a continuous segment"}
 
 [dependencies]
 bottleneck = "*"
