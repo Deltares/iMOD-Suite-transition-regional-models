@@ -23,7 +23,10 @@ def read_gen_file(genfile_path: Path) -> gpd.GeoDataFrame:
     """
     imod_logger.info(f"Reading GEN file: {genfile_path}")
     gdf = imod.formats.gen.read(genfile_path)
-    return gdf.explode(index_parts=False, ignore_index=True)
+    gdf = gdf.explode(index_parts=False, ignore_index=True)
+    # Snapping and merging work in 2D, so drop any Z values.
+    gdf.geometry = gdf.geometry.force_2d()
+    return gdf
 
 
 def snap_loose_ends(

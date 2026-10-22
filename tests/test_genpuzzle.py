@@ -48,6 +48,26 @@ def test_tolerance_controls_snapping(tmp_path: Path) -> None:
     assert len(large) == 9
 
 
+def test_z_coordinates_are_forced_to_2d(tmp_path: Path) -> None:
+    """Input with Z values gives the same 2D output as the input without Z."""
+    segments = imod.formats.gen.read(GENFILE_IN)
+    # Give each segment its own Z, so connected segments disagree at shared nodes.
+    lines = []
+    for i, geom in enumerate(segments.geometry):
+        lines.append(f"segment_{i}")
+        lines.extend(f"{x} {y} {i * 0.5}" for x, y in shapely.get_coordinates(geom))
+        lines.append("end")
+    lines.append("end")
+    genfile_z = tmp_path / "z.gen"
+    genfile_z.write_text("\n".join(lines) + "\n")
+
+    out_2d = genpuzzle(GENFILE_IN, tmp_path / "out_2d.gen")
+    out_z = genpuzzle(genfile_z, tmp_path / "out_z.gen")
+
+    assert not out_z.has_z.any()
+    assert _sorted_coordinates(out_z) == _sorted_coordinates(out_2d)
+
+
 PLOT_TEST_CASES = [
     ("Exact joins", (30, 5), (0, 5)),
     ("Larger gap", (21.5, 25), (0, 30)),
