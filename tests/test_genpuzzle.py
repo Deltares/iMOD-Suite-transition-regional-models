@@ -5,6 +5,7 @@ from pathlib import Path
 import geopandas as gpd
 import imod
 import pytest
+import shapely
 from matplotlib.figure import Figure
 
 from genpuzzle import genpuzzle
@@ -17,7 +18,7 @@ FIGURE_OUT = DATA_DIR / "genpuzzle_comparison.png"
 
 def _sorted_coordinates(gdf: gpd.GeoDataFrame) -> list[tuple]:
     """Return the vertices of each line in order, with the lines sorted."""
-    return sorted(tuple(line.coords) for line in gdf.geometry)
+    return sorted(tuple(map(tuple, shapely.get_coordinates(line).tolist())) for line in gdf.geometry)
 
 
 @pytest.fixture(scope="module")
@@ -43,8 +44,8 @@ def test_tolerance_controls_snapping(tmp_path: Path) -> None:
     small = genpuzzle(GENFILE_IN, tmp_path / "small.gen", tolerance=0.0001)
     large = genpuzzle(GENFILE_IN, tmp_path / "large.gen", tolerance=3.0)
 
-    assert len(small) == 9
-    assert len(large) == 8
+    assert len(small) == 11
+    assert len(large) == 9
 
 
 PLOT_TEST_CASES = [
@@ -52,9 +53,10 @@ PLOT_TEST_CASES = [
     ("Larger gap", (21.5, 25), (0, 30)),
     ("Converging line", (20, 50), (0, 56)),
     ("Isolated line", (70, 20), (53, 43)),
-    ("Floating point precision", (20, 75), (0, 83)),
-    ("Three-way junction", (60, 65), (43, 87)),
-    ("0.0001 gap", (20, 90), (0, 97)),
+    ("Diverging lines", (40, 70), (0, 70)),
+    ("Three-way junction", (60, 65), (43, 84)),
+    ("0.00099 gap", (20, 90), (0, 97)),
+    ("Square ring", (60, 95), (55, 103)),
 ]
 
 
@@ -73,7 +75,8 @@ def test_plot_comparison(
         labels = gdf.get("id", gdf.index.to_series())
         gdf.plot(ax=ax, column=labels, cmap="tab10", linewidth=2)
         for line in gdf.geometry:
-            (x0, y0), (x1, y1) = line.coords[0], line.coords[-1]
+            coords = shapely.get_coordinates(line)
+            (x0, y0), (x1, y1) = coords[0], coords[-1]
             ax.plot([x0, x1], [y0, y1], "ko", markersize=4)
         ax.set_title(f"{name} ({len(gdf)} lines)")
         ax.set_aspect("equal")
