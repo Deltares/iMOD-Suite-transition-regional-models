@@ -3,6 +3,7 @@
 This repository features created during the sprints for the NHI. Currently supported are:
 
 1. Convert an iMOD5 database to a coupled MODFLOW6-MetaSWAP simulation.
+2. Connect loose line segments in a GEN file into continuous segments.
 
 ##  Install
 
@@ -84,3 +85,40 @@ Arguments supported:
 \* Only required when there is CAP entry in the projectfile for MetaSWAP.
 
 \*\* `WINDOW` and `CELLSIZE` are optional together. If one is provided, the other must also be provided.
+
+## GENPUZZLE-Function
+
+The GENPUZZLE function reads a GEN file and creates a new GEN-file in which all loose-ends are
+connected to form a continuous segment.
+
+This is the equivalent of the GENPUZZLE batch function in iMOD5. In addition there is now an optional `tolerance` parameter to close larger gaps.
+
+If you installed with pixi:
+
+```powershell
+pixi run genpuzzle <GENFILE_IN> <GENFILE_OUT> [--tolerance <map units>]
+```
+
+For example:
+
+```powershell
+pixi run genpuzzle example.gen example_connected.gen --tolerance 0.1
+```
+
+If you followed the offline installation instructions, the commands are slightly
+different:
+
+```powershell
+.\activate.bat
+python genpuzzle.py <GENFILE_IN> <GENFILE_OUT> [--tolerance <map units>]
+```
+
+### Configuration
+
+Arguments supported:
+
+| Argument | Required | Default/Fallback | Datatype | Brief explanation |
+| --- | --- | --- | --- | --- |
+| `GENFILE_IN` | Yes | None | Path (string) | Path to the input GEN file. |
+| `GENFILE_OUT` | Yes | None | Path (string) | Path where the output GEN file will be written. |
+| `tolerance` | No | `0.0001` | Number (float) | Maximum distance in map units within which line endpoints are snapped together. |
