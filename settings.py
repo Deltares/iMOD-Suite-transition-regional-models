@@ -19,9 +19,12 @@ from pydantic import (
 
 imod_logger = logging.getLogger("imod")
 
+_GENSNAPTOGRID = "GENSNAPTOGRID"
+
 IssMode = Annotated[
+    # normalize input to lowercase and strip whitespace
     Literal["steady-state", "transient"],
-    BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v), # normalize input to lowercase and strip whitespace
+    BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v),  
 ]
 """IssMode represents the mode of the simulation: either 'steady-state' or 'transient'."""
 
@@ -38,7 +41,63 @@ _LOG_LEVELS = {
     "50": logging.CRITICAL,
 }
 
-class Settings(BaseModel):
+
+def _normalise_mapping(data: Any) -> Any:
+    """Make keywords case-insensitive and treat blank values as 'not provided'."""
+    if not isinstance(data, dict):
+        return data
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                continue  # blank -> field default applies
+        out[key.strip().lower() if isinstance(key, str) else key] = value
+    return out
+
+
+def _resolve_against_base_dir(v: Any, info: ValidationInfo) -> Any:
+    """Resolve relative paths against context["base_dir"], if given."""
+    base_dir = (info.context or {}).get("base_dir")
+    if base_dir is None or not isinstance(v, (str, Path)):
+        return v
+    return (Path(base_dir) / v).resolve()  # absolute paths are kept as-is
+
+
+def _parse_window(v: Any) -> Any:
+    if isinstance(v, str):
+        bbox = tuple(float(part) for part in v.split(","))
+        if not len(bbox) == 4:
+            raise ValueError(
+                f"WINDOW must have exactly four comma-separated values: xmin,ymin,xmax,ymax. Got: {v!r}"
+            )
+        v = bbox
+    return v
+
+
+def _check_window_bounds(bbox: tuple[float, float, float, float]) -> None:
+    xmin, ymin, xmax, ymax = bbox
+    if xmin >= xmax or ymin >= ymax:
+        raise ValueError(
+            "WINDOW must be xmin,ymin,xmax,ymax with xmin < xmax and ymin < ymax."
+        )
+
+
+def _parse_log_level(v: Any) -> int:
+    msg = f"LOGLEVEL must be one of {list(_LOG_LEVELS.keys())}. Got: {v!r}"
+    if isinstance(v, str):
+        if v.lower() not in _LOG_LEVELS:
+            raise ValueError(msg)
+        return _LOG_LEVELS[v.lower()]
+    elif isinstance(v, int):
+        if v not in _LOG_LEVELS.values():
+            raise ValueError(msg)
+        return v
+    else:
+        raise ValueError(msg)  # noqa: TRY004
+
+
+class ConvertSettings(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     prjfile_path: FilePath = Field(alias="prjfile_in")
@@ -50,7 +109,8 @@ class Settings(BaseModel):
     end_date: date = Field(date(1970, 1, 2), alias="edate")
     interval: str = Field("D", alias="interval")
     bin_dir: DirectoryPath | None = Field(None, alias="coupler_dir")
-    msw_dbase: Path | None = Field(None, alias="msw_dbase")  # existence checked in validate_msw
+    msw_dbase: Path | None = Field(None, alias="msw_dbase")  
+    # existence checked in validate_msw
     bbox: tuple[float, float, float, float] | None = Field(None, alias="window")
     cellsize: float | None = Field(None, gt=0, alias="cellsize")
     log_level: int = Field(logging.INFO, alias="loglevel")
@@ -63,25 +123,13 @@ class Settings(BaseModel):
     @classmethod
     def _normalise_input(cls, data: Any) -> Any:
         """Make keywords case-insensitive and treat blank values as 'not provided'."""
-        if not isinstance(data, dict):
-            return data
-        out: dict[str, Any] = {}
-        for key, value in data.items():
-            if isinstance(value, str):
-                value = value.strip()
-                if not value:
-                    continue  # blank -> field default applies
-            out[key.strip().lower() if isinstance(key, str) else key] = value
-        return out
+        return _normalise_mapping(data)
 
     @field_validator("prjfile_path", "out_dir", "bin_dir", "msw_dbase", mode="before")
     @classmethod
     def _resolve_relative(cls, v: Any, info: ValidationInfo) -> Any:
         """Resolve relative paths against context["base_dir"], if given."""
-        base_dir = (info.context or {}).get("base_dir")
-        if base_dir is None or not isinstance(v, (str, Path)):
-            return v
-        return (Path(base_dir) / v).resolve()  # absolute paths are kept as-is
+        return _resolve_against_base_dir(v, info)
 
     @field_validator("interval")
     @classmethod
@@ -98,27 +146,16 @@ class Settings(BaseModel):
     @field_validator("bbox", mode="before")
     @classmethod
     def _parse_bbox(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            bbox = tuple(float(part) for part in v.split(","))
-            if not len(bbox) == 4:
-                raise ValueError(
-                    f"WINDOW must have exactly four comma-separated values: xmin,ymin,xmax,ymax. Got: {v!r}"
-                )
-            v = bbox
-        return v
+        return _parse_window(v)
 
     @model_validator(mode="after")
-    def _check_consistency(self) -> "Settings":
+    def _check_consistency(self) -> "ConvertSettings":
         if (self.bbox is None) != (self.cellsize is None):
             raise ValueError(
                 "Both bbox (WINDOW) and cellsize must be provided together to create target grid."
             )
         if self.bbox is not None:
-            xmin, ymin, xmax, ymax = self.bbox
-            if xmin >= xmax or ymin >= ymax:
-                raise ValueError(
-                    "WINDOW must be xmin,ymin,xmax,ymax with xmin < xmax and ymin < ymax."
-                )
+            _check_window_bounds(self.bbox)
         if not self.is_steady_state and self.end_date < self.start_date:
             raise ValueError("EDATE must not be before SDATE.")
         if self.out_dir.is_dir() and any(self.out_dir.iterdir()) and not self.overwrite:
@@ -131,17 +168,7 @@ class Settings(BaseModel):
     @field_validator("log_level", mode="before")
     @classmethod
     def _log_level_to_int(cls, v: str) -> int:
-        msg = f"LOGLEVEL must be one of {list(_LOG_LEVELS.keys())}. Got: {v!r}"
-        if isinstance(v, str):
-            if v.lower() not in _LOG_LEVELS:
-                raise ValueError(msg)
-            return _LOG_LEVELS[v.lower()]
-        elif isinstance(v, int):
-            if v not in _LOG_LEVELS.values():
-                raise ValueError(msg)
-            return v
-        else:
-            raise ValueError(msg)  # noqa: TRY004
+        return _parse_log_level(v)
 
     def validate_msw(self) -> None:
         """Extra checks, only needed when creating a MetaSwap model."""
@@ -161,13 +188,105 @@ class Settings(BaseModel):
             start=self.start_date, end=self.end_date, freq=self.interval
         ).tolist()
 
-def read_settings(inifile: Path | str) -> Settings:
+
+class GenSnapToGridSettings(BaseModel):
+    """
+    ConvertSettings for the GENSNAPTOGRID function (iMOD5 manual, section 8.4.1): snap
+    the lines in a GEN file to the cell edges of a grid.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    genfile_in: FilePath = Field(alias="genfile_in")
+    genfile_out: Path = Field(alias="genfile_out")
+    idffile: FilePath | None = Field(None, alias="idffile")
+    bbox: tuple[float, float, float, float] | None = Field(None, alias="window")
+    cellsize: float | None = Field(None, gt=0, alias="cellsize")
+    max_snap_distance: float | None = Field(None, gt=0, alias="max_snap_distance")
+    i3d: int = Field(0, alias="i3d")
+    function: str = Field(_GENSNAPTOGRID, alias="function")
+    overwrite: bool = Field(False, alias="overwrite")
+    log_level: int = Field(logging.INFO, alias="loglevel")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_input(cls, data: Any) -> Any:
+        """Make keywords case-insensitive and treat blank values as 'not provided'."""
+        return _normalise_mapping(data)
+
+    @field_validator("genfile_in", "genfile_out", "idffile", mode="before")
+    @classmethod
+    def _resolve_relative(cls, v: Any, info: ValidationInfo) -> Any:
+        """Resolve relative paths against context["base_dir"], if given."""
+        return _resolve_against_base_dir(v, info)
+
+    @field_validator("bbox", mode="before")
+    @classmethod
+    def _parse_bbox(cls, v: Any) -> Any:
+        return _parse_window(v)
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _log_level_to_int(cls, v: str) -> int:
+        return _parse_log_level(v)
+
+    @field_validator("function", mode="before")
+    @classmethod
+    def _check_function(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip().upper() == _GENSNAPTOGRID:
+            return _GENSNAPTOGRID
+        raise ValueError(f"FUNCTION must be {_GENSNAPTOGRID}. Got: {v!r}")
+
+    @field_validator("i3d", mode="before")
+    @classmethod
+    def _check_i3d(cls, v: Any) -> int:
+        i3d = int(v)
+        if i3d == 1:
+            raise ValueError(
+                "I3D=1 (3D GEN output) is not supported yet, only I3D=0 (2D GEN)."
+            )
+        if i3d != 0:
+            raise ValueError(f"I3D must be 0. Got: {v!r}")
+        return i3d
+
+    @model_validator(mode="after")
+    def _check_consistency(self) -> "GenSnapToGridSettings":
+        if self.idffile is None:
+            if self.bbox is None or self.cellsize is None:
+                raise ValueError(
+                    "Provide either IDFFILE, or both WINDOW and CELLSIZE, "
+                    "to define the grid to snap to."
+                )
+        elif self.cellsize is not None:
+            raise ValueError(
+                "CELLSIZE cannot be combined with IDFFILE: the cell size of the "
+                "IDF defines the grid. Use WINDOW to reduce its extent."
+            )
+        if self.bbox is not None:
+            _check_window_bounds(self.bbox)
+        if self.genfile_out.exists() and not self.overwrite:
+            raise ValueError(
+                f"Output GEN file already exists: {self.genfile_out}, "
+                "please either remove it or set 'overwrite' to True."
+            )
+        return self
+
+
+def _read_ini[T: BaseModel](model: type[T], inifile: Path | str) -> T:
     imod_logger.info(f"Reading settings from {inifile}")
     inifile = Path(inifile)
     config = configparser.ConfigParser(allow_unnamed_section=True, interpolation=None)
     with inifile.open(encoding="utf-8") as f:
         config.read_file(f)
-    return Settings.model_validate(
+    return model.model_validate(
         dict(config[configparser.UNNAMED_SECTION]),
         context={"base_dir": inifile.resolve().parent},
     )
+
+
+def read_convert_settings(inifile: Path | str) -> ConvertSettings:
+    return _read_ini(ConvertSettings, inifile)
+
+
+def read_gen_snap_to_grid_settings(inifile: Path | str) -> GenSnapToGridSettings:
+    return _read_ini(GenSnapToGridSettings, inifile)
