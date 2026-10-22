@@ -9,8 +9,6 @@ import imod
 import numpy as np
 import shapely
 import xugrid as xu
-from scipy.sparse import coo_matrix
-from scipy.sparse.csgraph import connected_components
 
 from logging_helpers import imod_logger, init_logging
 
@@ -25,8 +23,15 @@ def read_gen_file(genfile_path: Path) -> gpd.GeoDataFrame:
     gdf = imod.formats.gen.read(genfile_path)
     gdf = gdf.explode(index_parts=False, ignore_index=True)
     # Snapping and merging work in 2D, so drop any Z values.
-    gdf.geometry = gdf.geometry.force_2d()
-    return gdf
+    geometries = gdf.geometry.force_2d().to_numpy()
+    # imod reads closed features as polygons. Treat them as chains, as iMOD5 does,
+    # so their endpoints take part in snapping and joining.
+    is_polygon = np.array([g.geom_type == "Polygon" for g in geometries], dtype=bool)
+    geometries[is_polygon] = [
+        shapely.LineString(shapely.get_coordinates(g.exterior))
+        for g in geometries[is_polygon]
+    ]
+    return gdf.set_geometry(geometries)
 
 
 def snap_loose_ends(
@@ -67,53 +72,125 @@ def snap_loose_ends(
     )
 
 
-def _pair_lines(endpoint_nodes: np.ndarray) -> np.ndarray:
-    """Pair lines at each node in file order, leaving any odd line unpaired."""
-    lines_by_node = defaultdict(list)
-    for line_index, nodes in enumerate(endpoint_nodes):
-        for node in nodes:
-            lines_by_node[node].append(line_index)
-
-    pairs = []
-    for line_indices in lines_by_node.values():
-        pairs.extend(zip(line_indices[::2], line_indices[1::2]))
-
-    return np.array(pairs, dtype=int).reshape(-1, 2)
+def _ending_at(
+    coords: np.ndarray, end_nodes: tuple[int, int], node: int
+) -> tuple[np.ndarray, tuple[int, int]]:
+    """Return the chain reversed if needed so that it ends at `node`."""
+    if end_nodes.index(node) == 0:
+        return coords[::-1], end_nodes[::-1]
+    return coords, end_nodes
 
 
-def _merge_with_junctions(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.ndarray:
-    """Merge a network containing junctions, pairing branches in file order."""
-    # Select which lines connect at each endpoint node.
-    line_pairs = _pair_lines(endpoint_nodes)
-    n_lines = len(lines)
+def _starting_at(
+    coords: np.ndarray, end_nodes: tuple[int, int], node: int
+) -> tuple[np.ndarray, tuple[int, int]]:
+    """Return the chain reversed if needed so that it starts at `node`."""
+    if end_nodes.index(node) == 1:
+        return coords[::-1], end_nodes[::-1]
+    return coords, end_nodes
 
-    # Build a graph with one vertex per line and one edge per selected pair.
-    first_lines, second_lines = line_pairs.T
-    line_graph = coo_matrix(
-        (np.ones(len(line_pairs)), (first_lines, second_lines)),
-        shape=(n_lines, n_lines),
+
+def _join_chains(
+    chain_coords: np.ndarray,
+    chain_end_nodes: tuple[int, int],
+    connected_coords: np.ndarray,
+    connected_end_nodes: tuple[int, int],
+) -> tuple[np.ndarray, tuple[int, int]]:
+    """
+    Join two chains that share an endpoint node into one chain.
+
+    For example, if the chain runs A to B and the connected line runs C to A, the
+    shared node A is the start of the chain, so the connected line goes first:
+    C to A to B. If the connected line runs A to C instead, it is reversed first,
+    giving the same result.
+    """
+    if chain_end_nodes[0] in connected_end_nodes:
+        # The shared node is the chain's start, so the connected line goes first.
+        front_coords, front_end_nodes = _ending_at(
+            connected_coords, connected_end_nodes, chain_end_nodes[0]
+        )
+        back_coords, back_end_nodes = chain_coords, chain_end_nodes
+    else:
+        # The shared node is the chain's end, so the connected line goes last.
+        front_coords, front_end_nodes = chain_coords, chain_end_nodes
+        back_coords, back_end_nodes = _starting_at(
+            connected_coords, connected_end_nodes, chain_end_nodes[1]
+        )
+    return np.vstack([front_coords, back_coords[1:]]), (
+        front_end_nodes[0],
+        back_end_nodes[1],
     )
 
-    # Identify groups connected through one or more pairs.
-    _, group_ids = connected_components(line_graph, directed=False)
-    # Collect each group's geometries and merge their connected segments.
-    grouped_lines = shapely.multilinestrings(lines, indices=group_ids)
-    return shapely.line_merge(grouped_lines)
+
+def _find_next_connected_line(
+    line_idx: int,
+    chains: dict[int, tuple[np.ndarray, tuple[int, int]]],
+    lines_at_node: dict[int, set[int]],
+) -> int | None:
+    """
+    Return the position of the first line after `line_idx` in the list passed to
+    `_merge_connected_lines` that touches it at an endpoint.
+
+    Lines that have been absorbed are no longer in `chains`, so they are skipped.
+    Returns None if there is none.
+    """
+    _, end_nodes = chains[line_idx]
+    connected = {
+        connected_idx
+        for node in end_nodes
+        for connected_idx in lines_at_node[node]
+        if connected_idx > line_idx and connected_idx in chains
+    }
+    return min(connected, default=None)
 
 
-def merge_lines(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.ndarray:
-    """Merge chains directly, using file-order pairing when junctions exist."""
-    node_counts = np.bincount(endpoint_nodes.ravel())
-    if np.any(node_counts > 2):
-        # Note: For some reason, all the nodes need to be passed otherwise 
-        # we lose the xugrid ids of what is connected
-        merged_lines = _merge_with_junctions(lines, endpoint_nodes)
-    else:
-        merged = shapely.line_merge(shapely.multilinestrings(lines))
-        merged_lines = shapely.get_parts(merged)
+def _merge_connected_lines(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.ndarray:
+    """
+    Join lines that touch at an endpoint, following the GENPUZZLE join in iMOD5.
 
-    imod_logger.info(f"Merged {len(lines)} lines into {len(merged_lines)} segments")
-    return merged_lines
+    `chains` holds the lines not yet absorbed, keyed by position. Lines are handled
+    in order. Each line keeps joining the first connected line after it until none
+    are left, and each joined line is removed from `chains`.
+    """
+    chains = {
+        line_idx: (shapely.get_coordinates(line), (int(start), int(end)))
+        for line_idx, (line, (start, end)) in enumerate(zip(lines, endpoint_nodes))
+    }
+
+    lines_at_node: dict[int, set[int]] = defaultdict(set)
+    for line_idx, (_, end_nodes) in chains.items():
+        for node in end_nodes:
+            lines_at_node[node].add(line_idx)
+
+    for line_idx in range(len(lines)):
+        if line_idx not in chains:
+            continue
+        connected_idx = _find_next_connected_line(line_idx, chains, lines_at_node)
+        while connected_idx is not None:
+            chain_coords, chain_end_nodes = chains[line_idx]
+            connected_coords, connected_end_nodes = chains.pop(connected_idx)
+            chains[line_idx] = _join_chains(
+                chain_coords, chain_end_nodes, connected_coords, connected_end_nodes
+            )
+            connected_idx = _find_next_connected_line(line_idx, chains, lines_at_node)
+
+    return np.array(
+        [shapely.LineString(coords) for coords, _ in chains.values()],
+        dtype=object,
+    )
+
+
+def _rings_to_polygons(geometries: np.ndarray) -> np.ndarray:
+    """Convert closed lines to polygons, starting at the top-left vertex."""
+    result = []
+    for geometry in geometries:
+        if shapely.is_closed(geometry):
+            ring = shapely.get_coordinates(geometry)[:-1]
+            start = np.lexsort((-ring[:, 1], ring[:, 0]))[0]
+            ring = np.roll(ring, -start, axis=0)
+            geometry = shapely.Polygon(np.vstack([ring, ring[:1]]))
+        result.append(geometry)
+    return np.array(result, dtype=object)
 
 
 def genpuzzle(
@@ -129,8 +206,9 @@ def genpuzzle(
     if endpoint_nodes is None:
         merged = snapped
     else:
-        merged = merge_lines(snapped, endpoint_nodes)
-    gdf_out = gpd.GeoDataFrame(geometry=merged)
+        merged = _merge_connected_lines(snapped, endpoint_nodes)
+    imod_logger.info(f"Merged {len(lines)} lines into {len(merged)} segments")
+    gdf_out = gpd.GeoDataFrame(geometry=_rings_to_polygons(merged))
     imod_logger.info(f"Writing GEN file: {genfile_out}")
     genfile_out.parent.mkdir(parents=True, exist_ok=True)
     imod.formats.gen.write(genfile_out, gdf_out)
