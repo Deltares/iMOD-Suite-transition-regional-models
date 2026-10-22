@@ -17,8 +17,8 @@ from imod.mf6.oc import OutputControl
 from imod.mf6.simulation import Modflow6Simulation
 from primod import MetaMod, MetaModDriverCoupling
 
-from helpers import clip_wel_packages_to_domain
-from settings import Settings, read_settings
+from clipping import clip_wel_packages_to_domain
+from settings import ConvertSettings, read_convert_settings
 
 # Loggers in python are singletons, so this is the same instance as the one used in imod.logging.pythonlogger.PythonLogger.
 imod_logger = logging.getLogger("imod")
@@ -259,7 +259,7 @@ def main():
     init_logging()
     try:
         # Read settings from ini file
-        settings: Settings = read_settings(args.inifile)
+        settings: ConvertSettings = read_convert_settings(args.inifile)
         
         # Remove existing output directory if overwrite is enabled
         if settings.overwrite and settings.out_dir.is_dir():
