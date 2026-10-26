@@ -152,6 +152,9 @@ def _merge_connected_lines(lines: np.ndarray, endpoint_nodes: np.ndarray) -> np.
     `chains` holds the lines not yet absorbed, keyed by position. Lines are handled
     in order. Each line keeps joining the first connected line after it until none
     are left, and each joined line is removed from `chains`.
+
+    This is being done instead of using shapely.merge_linestrings to mimic the 
+    behavior of how GENPUZZLE function in iMOD5 handles junctions closely as possible.
     """
     chains = {
         line_idx: (shapely.get_coordinates(line), (int(start), int(end)))
