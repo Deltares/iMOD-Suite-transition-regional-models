@@ -1,6 +1,4 @@
 # %%
-import argparse
-import shutil
 from pathlib import Path
 
 import imod
@@ -13,25 +11,9 @@ from imod.mf6.simulation import Modflow6Simulation
 from primod import MetaMod, MetaModDriverCoupling
 
 from src.clipping import clip_wel_packages_to_domain
-from src.log import add_filehandler, imod_logger, init_logging
-from src.settings import ConvertSettings, read_convert_settings
-
-
-def create_target_grid(
-        window: tuple[float, float, float, float] | None, 
-        cellsize: float | None
-    ) -> xr.DataArray | None:
-    """
-    Create target grid for MODFLOW 6 simulation based on provided window and cellsize.
-    """
-    if window is None and cellsize is None:
-        return None
-
-    imod_logger.info(f"Creating target grid with window: {window} and cellsize: {cellsize}")
-    xmin, ymin, xmax, ymax = window
-    return imod.util.empty_2d(
-        dx=cellsize, xmin=xmin, xmax=xmax, dy=-cellsize, ymin=ymin, ymax=ymax
-    )
+from src.grid_helpers import create_target_grid
+from src.log import imod_logger
+from src.settings import ConvertSettings
 
 
 def convert_imod5_to_mf6_sim(
@@ -222,7 +204,11 @@ def convert_model(settings: ConvertSettings):
     # Generate list of times for simulation
     times = settings.simulation_times()
     # Create target grid
-    target_grid = create_target_grid(settings.bbox, settings.cellsize)
+    if settings.bbox is None and settings.cellsize is None:
+        target_grid = None
+    else:
+        target_grid = create_target_grid(like=None, window=settings.bbox, cellsize=settings.cellsize)
+    
     # Read iMOD5 project file data
     imod5_data, period_data = open_projectfile_data(settings.prjfile_path)
     has_msw = "cap" in imod5_data
