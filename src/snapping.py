@@ -1,4 +1,31 @@
-"""Snap GEN line features to the edges of a structured grid."""
+"""Snap GEN line features to the edges of a structured grid.
+
+#### How lines are snapped
+
+The result was compared against iMOD5 5.6.1 on synthetic GEN files:
+
+- A line selects a cell edge when it crosses the straight segment between the
+  centres of the two cells that share that edge. Vertices are not moved.
+- The edge of the cell that contains the last vertex of a line is also selected,
+  even if the line stops before the centre of that cell. This is what iMOD5 does.
+  The first vertex is not extended, so reversing a line changes the result.
+- Only edges between two cells are selected: edges on the boundary of the grid
+  are never snapped to. A line along the boundary, a line shorter than a cell, or
+  a line outside the grid gives no output. If no line is snapped at all, no
+  output file is written and the function raises an error.
+- Lines are clipped to the grid. Every input feature keeps its own output line
+  and attributes, also if two lines snap to the same edge.
+- If a line leaves and re-enters the grid, the parts are written as separate
+  features with the attributes repeated, as a GEN file has no multi-part lines.
+- GEN files do not store a coordinate system, so the lines and the grid must use
+  the same one.
+
+Known difference: lines that pass exactly through cell centres (for example a
+45 degree line from centre to centre) are ties. iMOD5 resolves these differently
+from this implementation, and the result of this implementation can depend on
+floating point rounding.
+
+"""
 
 from pathlib import Path
 
