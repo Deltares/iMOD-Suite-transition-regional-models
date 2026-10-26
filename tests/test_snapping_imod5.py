@@ -78,6 +78,27 @@ CASES = {
     "reversed-end-before-centre-0.2": [[(1.1, 2.3), (1.1, 0.1)]],
     "reversed-start-after-centre-0.2": [[(1.1, 3.9), (1.1, 1.7)]],
     "end-x-before-centre-0.2": [[(0.1, 1.1), (2.3, 1.1)]],
+    # Slanted last segments that stop before the centre of the end cell are
+    # extended too.
+    "slanted-end-before-centre": [[(1.1, 0.1), (1.3, 2.3)]],
+    "slanted-end-x-before-centre": [[(0.1, 1.1), (2.3, 1.3)]],
+    # iMOD5 only extends the end of the last feature that reaches the grid.
+    "first-feature-end-not-extended": [
+        [(1.1, 0.1), (1.1, 2.3)],
+        [(2.1, 0.1), (2.1, 3.9)],
+    ],
+    "last-feature-end-extended": [
+        [(2.1, 0.1), (2.1, 3.9)],
+        [(1.1, 0.1), (1.1, 2.3)],
+    ],
+    "last-feature-outside-ignored": [
+        [(1.1, 0.1), (1.1, 2.3)],
+        [(10.0, 10.0), (12.0, 12.0)],
+    ],
+    "last-feature-in-single-cell": [
+        [(1.1, 0.1), (1.1, 2.3)],
+        [(3.1, 3.1), (3.3, 3.2)],
+    ],
     "reversed-end-x-before-centre-0.2": [[(2.3, 1.1), (0.1, 1.1)]],
     "start-x-after-centre-0.2": [[(1.7, 1.1), (3.9, 1.1)]],
     "reversed-start-x-after-centre-0.2": [[(3.9, 1.1), (1.7, 1.1)]],
@@ -223,12 +244,14 @@ def save_comparison_plot(
     theirs: gpd.GeoDataFrame,
     window: Window,
     cellsize: float,
+    tick_step: float | None = None,
 ) -> None:
     xmin, ymin, xmax, ymax = window
+    tick_step = tick_step or cellsize
     fig = Figure(figsize=(7, 7))
     ax = fig.subplots()
-    ax.set_xticks(np.arange(xmin, xmax + 0.5 * cellsize, cellsize))
-    ax.set_yticks(np.arange(ymin, ymax + 0.5 * cellsize, cellsize))
+    ax.set_xticks(np.arange(xmin, xmax + 0.5 * tick_step, tick_step))
+    ax.set_yticks(np.arange(ymin, ymax + 0.5 * tick_step, tick_step))
     ax.tick_params(labelbottom=False, labelleft=False)
     ax.grid(color="0.8")
     for line in lines:
@@ -322,4 +345,81 @@ def test_snap_matches_imod5(tmp_path: Path, case: str, grid: str):
 
     if case in KNOWN_DIFFERENCES and has_differences:
         pytest.xfail(KNOWN_DIFFERENCES[case])
+    assert not has_differences, report
+
+
+# A grid as used for a large regional iMOD5 model: 25 m cells over 26 x 33 km
+# in Dutch RD coordinates (1040 x 1320 cells).
+LARGE_WINDOW: Window = (175_000.0, 364_000.0, 201_000.0, 397_000.0)
+LARGE_CELLSIZE = 25.0
+
+
+def make_large_lines(window: Window, seed: int = 42) -> list[Line]:
+    """
+    Synthetic stand-in for a real-world GEN file: meandering watercourses with
+    many vertices, which are cut off where they leave the window, plus one long
+    straight line (e.g. a dike or road) crossing the whole window.
+    """
+    xmin, ymin, xmax, ymax = window
+    rng = np.random.default_rng(seed)
+    lines: list[Line] = []
+    for _ in range(25):
+        x = rng.uniform(xmin, xmax)
+        y = rng.uniform(ymin, ymax)
+        heading = rng.uniform(0.0, 2.0 * np.pi)
+        line: Line = [(x, y)]
+        for _ in range(rng.integers(100, 400)):
+            heading += rng.normal(0.0, 0.4)
+            step = rng.uniform(5.0, 150.0)
+            x += step * np.cos(heading)
+            y += step * np.sin(heading)
+            if not (xmin <= x <= xmax and ymin <= y <= ymax):
+                break
+            line.append((x, y))
+        if len(line) > 1:
+            lines.append(line)
+    lines.append([(xmin - 500.0, ymin + 1234.5), (xmax + 500.0, ymax - 4321.7)])
+    return lines
+
+
+def test_snap_matches_imod5_large_grid(tmp_path: Path):
+    xmin, ymin, xmax, ymax = LARGE_WINDOW
+    cellsize = LARGE_CELLSIZE
+    case_dir = tmp_path / "large"
+    case_dir.mkdir()
+    lines = make_large_lines(LARGE_WINDOW)
+    gen_in = case_dir / "input.gen"
+    write_ascii_gen(gen_in, lines)
+
+    ours = snap_with_ours(gen_in, case_dir / "ours.gen", LARGE_WINDOW, cellsize)
+    gen_out = case_dir / "imod5.gen"
+    result = run_imod5(case_dir, gen_in, gen_out, LARGE_WINDOW, cellsize)
+    theirs = read_gen_or_empty(gen_out)
+
+    ours_edges = grid_edges(ours, xmin, ymin, cellsize)
+    imod5_edges = grid_edges(theirs, xmin, ymin, cellsize)
+    assert len(imod5_edges) > 1000, "Test input should produce a substantial result"
+
+    only_in_ours = sorted(ours_edges - imod5_edges)
+    only_in_imod5 = sorted(imod5_edges - ours_edges)
+    has_differences = bool(only_in_ours or only_in_imod5)
+    report = (
+        f"Edges differ (grid node indices; files in {case_dir}).\n"
+        f"Edges: ours {len(ours_edges)}, iMOD5 {len(imod5_edges)}\n"
+        f"Only ours ({len(only_in_ours)}): {only_in_ours[:50]}\n"
+        f"Only iMOD5 ({len(only_in_imod5)}): {only_in_imod5[:50]}\n"
+        f"iMOD5 return code: {result.returncode}, wrote output: {gen_out.exists()}"
+    )
+    (case_dir / "diff.txt").write_text(
+        report if has_differences else "identical\n", encoding="utf-8"
+    )
+    save_comparison_plot(
+        case_dir / "comparison.png",
+        lines,
+        ours,
+        theirs,
+        LARGE_WINDOW,
+        cellsize,
+        tick_step=100 * cellsize,
+    )
     assert not has_differences, report

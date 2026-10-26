@@ -247,6 +247,37 @@ def test_snap_gen_to_grid_extends_line_end_to_cell_centre(like, coordinates, n_e
     assert len(_unit_edges(actual)) == n_edges
 
 
+@pytest.mark.parametrize(
+    "coordinates",
+    [
+        [(1.1, 0.1), (1.3, 2.3)],
+        [(0.1, 1.1), (2.3, 1.3)],
+    ],
+)
+def test_snap_gen_to_grid_extends_slanted_line_end(like, coordinates):
+    original = gpd.GeoDataFrame(geometry=[shapely.LineString(coordinates)])
+    actual = snap_gen_to_grid(original, like=like)
+    assert len(_unit_edges(actual)) == 3
+
+
+@pytest.mark.parametrize(
+    "lines, n_edges",
+    [
+        # Only the last feature is extended; the first stops 0.2 before the centre.
+        ([[(1.1, 0.1), (1.1, 2.3)], [(2.1, 0.1), (2.1, 3.9)]], [2, 4]),
+        ([[(2.1, 0.1), (2.1, 3.9)], [(1.1, 0.1), (1.1, 2.3)]], [4, 3]),
+        # A last feature outside the grid is ignored.
+        ([[(1.1, 0.1), (1.1, 2.3)], [(10.0, 10.0), (12.0, 12.0)]], [3]),
+        # A last feature that snaps to nothing still counts as the last feature.
+        ([[(1.1, 0.1), (1.1, 2.3)], [(3.1, 3.1), (3.3, 3.2)]], [2]),
+    ],
+)
+def test_snap_gen_to_grid_extends_only_last_feature(like, lines, n_edges):
+    original = gpd.GeoDataFrame(geometry=[shapely.LineString(line) for line in lines])
+    actual = snap_gen_to_grid(original, like=like)
+    assert [len(_unit_edges(actual.iloc[[i]])) for i in range(len(actual))] == n_edges
+
+
 def test_snap_gen_to_grid_does_not_extend_line_inside_single_cell(like):
     original = gpd.GeoDataFrame(
         geometry=[shapely.LineString([(1.1, 1.1), (1.2, 1.1)])]

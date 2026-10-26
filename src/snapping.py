@@ -6,8 +6,12 @@ The result was compared against iMOD5 5.6.1 on synthetic GEN files:
 
 - A line selects a cell edge when it crosses the straight segment between the
   centres of the two cells that share that edge. Vertices are not moved.
-- The edge of the cell that contains the last vertex of a line is also selected,
-  even if the line stops before the centre of that cell. This is what iMOD5 does.
+- The edge of the cell that contains the last vertex of the last feature is also
+  selected, even if the line stops before the centre of that cell. This is what
+  iMOD5 does. It does not extend the end of any other feature, and only the
+  last feature that reaches the grid counts: a last feature that is entirely
+  outside the grid is ignored, but one that snaps to nothing (for example a
+  line within a single cell) still prevents the extension of the one before it.
   The first vertex is not extended, so reversing a line changes the result.
 - Only edges between two cells are selected: edges on the boundary of the grid
   are never snapped to. A line along the boundary, a line shorter than a cell, or
@@ -89,37 +93,34 @@ def _target_grid(
     )
 
 
-def _extend_line_ends(lines: np.ndarray, grid) -> np.ndarray:
+def _extend_line_end(line: shapely.LineString, grid) -> shapely.LineString:
     """
-    Extend the last segment of each line to the centre of the cell holding its
+    Extend the last segment of a line to the centre of the cell holding its
     last vertex, as iMOD5 does: the edge of the end cell is snapped even when
-    the line stops before the centre of that cell. Starts are not extended.
-    Ends on a cell boundary or outside the grid are left alone.
+    the line stops before the centre of that cell. Ends on a cell boundary or
+    outside the grid are left alone.
     """
-    ends = np.array([line.coords[-1][:2] for line in lines])
-    faces = grid.locate_points(ends)
-    extended = lines.copy()
-    for i, (line, end, face) in enumerate(zip(lines, ends, faces)):
-        if face < 0:
-            continue
-        corners = grid.node_coordinates[grid.face_node_connectivity[face]]
-        lower, upper = corners.min(axis=0), corners.max(axis=0)
-        tolerance = 1e-9 * float((upper - lower).min())
-        if ((end - lower) <= tolerance).any() or ((upper - end) <= tolerance).any():
-            continue
-        coordinates = np.asarray(line.coords)[:, :2]
-        steps = np.diff(coordinates, axis=0)
-        lengths = np.hypot(steps[:, 0], steps[:, 1])
-        nonzero = np.flatnonzero(lengths > 0.0)
-        if nonzero.size == 0:
-            continue
-        direction = steps[nonzero[-1]] / lengths[nonzero[-1]]
-        reach = float(np.dot(grid.centroids[face] - end, direction))
-        if reach <= 0.0:
-            continue
-        new_end = end + direction * reach * (1.0 + 1e-6)
-        extended[i] = shapely.LineString(np.vstack([coordinates, new_end]))
-    return extended
+    coordinates = np.asarray(line.coords)[:, :2]
+    end = coordinates[-1]
+    face = grid.locate_points(end[np.newaxis])[0]
+    if face < 0:
+        return line
+    corners = grid.node_coordinates[grid.face_node_connectivity[face]]
+    lower, upper = corners.min(axis=0), corners.max(axis=0)
+    tolerance = 1e-9 * float((upper - lower).min())
+    if ((end - lower) <= tolerance).any() or ((upper - end) <= tolerance).any():
+        return line
+    steps = np.diff(coordinates, axis=0)
+    lengths = np.hypot(steps[:, 0], steps[:, 1])
+    nonzero = np.flatnonzero(lengths > 0.0)
+    if nonzero.size == 0:
+        return line
+    direction = steps[nonzero[-1]] / lengths[nonzero[-1]]
+    reach = float(np.dot(grid.centroids[face] - end, direction))
+    if reach <= 0.0:
+        return line
+    new_end = end + direction * reach * (1.0 + 1e-6)
+    return shapely.LineString(np.vstack([coordinates, new_end]))
 
 
 def snap_gen_to_grid(
@@ -134,9 +135,9 @@ def snap_gen_to_grid(
 
     The edge selection follows iMOD5's GENSNAPTOGRID: a line selects an edge
     when it crosses the segment joining the centres of the two cells sharing 
-    that edge, and the edge of the cell holding the last vertex of a line is 
-    added as well. Lines passing exactly through cell centres are ties; the 
-    result can differ from iMOD5 there.
+    that edge, and, for the last feature only, the edge of the cell holding its
+    last vertex is added as well. Lines passing exactly through cell centres are 
+    ties; the result can differ from iMOD5 there.
 
     Features are clipped to the grid extent and never merged across input rows.
     Features producing no edges are omitted. Disconnected snapped parts are
@@ -202,6 +203,10 @@ def snap_gen_to_grid(
     if clipped.empty:
         return original.iloc[:0].copy()
 
+    # iMOD5 only extends the end of the last feature that reaches the grid, so
+    # find it before lines collapsed by vertex snapping are dropped.
+    last_position = clipped.index.get_level_values(0).max()
+
     # Snap vertices first so lines collapsed to a node never reach xugrid's
     # edge allocator, which cannot handle zero intersected segments.
     coordinates = shapely.get_coordinates(clipped.geometry)
@@ -222,15 +227,16 @@ def snap_gen_to_grid(
     if snapped.empty:
         return original.iloc[:0].copy()
 
-    # iMOD5 also snaps the edge of the end cell, but only for lines that snap
-    # to at least one edge: a line within a single cell snaps to nothing.
-    with_edges = np.unique(snapped["line_index"].to_numpy())
-    geometries_array = lines.geometry.to_numpy().copy()
-    geometries_array[with_edges] = _extend_line_ends(
-        geometries_array[with_edges], grid
-    )
-    lines.geometry = geometries_array
-    snapped = xu.create_snap_to_grid_dataframe(lines, grid, max_snap_distance=0.0)
+    # iMOD5 also snaps the edge of the end cell, but only for the last feature
+    # of the file, and only if it snaps to at least one edge: a line within a
+    # single cell snaps to nothing.
+    last_rows = np.flatnonzero(original_positions == last_position)
+    if last_rows.size > 0 and np.isin(last_rows[-1], snapped["line_index"]):
+        row = last_rows[-1]
+        geometries_array = lines.geometry.to_numpy().copy()
+        geometries_array[row] = _extend_line_end(geometries_array[row], grid)
+        lines.geometry = geometries_array
+        snapped = xu.create_snap_to_grid_dataframe(lines, grid, max_snap_distance=0.0)
 
     snapped["line_index"] = original_positions[snapped["line_index"].to_numpy()]
     snapped = snapped.drop_duplicates(["line_index", "edge_index"])
