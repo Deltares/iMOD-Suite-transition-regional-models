@@ -3,6 +3,7 @@
 This repository features created during the sprints for the NHI. Currently supported are:
 
 1. Convert an iMOD5 database to a coupled MODFLOW6-MetaSWAP simulation.
+2. Connect loose line segments in a GEN file into continuous segments.
 
 ##  Install
 
@@ -84,3 +85,42 @@ Arguments supported:
 \* Only required when there is CAP entry in the projectfile for MetaSWAP.
 
 \*\* `WINDOW` and `CELLSIZE` are optional together. If one is provided, the other must also be provided.
+
+## GENPUZZLE-Function
+
+The GENPUZZLE function reads a GEN file and creates a new GEN-file in which all loose-ends are
+connected to form a continuous segment.
+
+This is the equivalent of the GENPUZZLE batch function in iMOD5. In addition there is now an optional `tolerance` parameter to close larger gaps.
+
+If you installed with pixi:
+
+```powershell
+pixi run genpuzzle <name of your ini file>
+```
+
+For example:
+
+```powershell
+pixi run genpuzzle genpuzzle_example.ini
+```
+
+If you followed the offline installation instructions, the commands are slightly
+different:
+
+```powershell
+.\activate.bat
+python genpuzzle <name of your ini file>
+```
+
+### Configuration
+
+Keywords supported in the ini file:
+
+| Keyword | Required | Default/Fallback | Datatype | Brief explanation |
+| --- | --- | --- | --- | --- |
+| `FUNCTION` | Yes | None | String | Must be `GENPUZZLE`. |
+| `GENFILE_IN` | Yes | None | Path (string) | Path to the input GEN file. Binary or ASCII GEN files are accepted. |
+| `GENFILE_OUT` | Yes | None | Path (string) | Path where the output GEN file will be written. |
+| `OVERWRITE` | No | `false` | Boolean | Allow overwriting an existing output GEN file. |
+| `TOLERANCE` | No | `0.001` | Number (float) | Maximum distance in map units within which line endpoints are snapped together. `0.001` matches iMOD5 tolerance.|

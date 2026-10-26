@@ -10,7 +10,8 @@ from collections.abc import Iterable
 from imod.mf6.model import Modflow6Model
 from imod.mf6.wel import Well
 from imod.util.spatial import spatial_reference
-from imod.logging import logger, LogLevel
+
+from logging_helpers import imod_logger
 
 
 def domain_bounds(domain) -> tuple[float, float, float, float]:
@@ -41,7 +42,7 @@ def clip_point_package_to_bounds(
             f"Dropped {n_dropped}/{n_before} point(s) from package {pkgname} outside domain bounds "
             f"(x: {x_min:.2f}-{x_max:.2f}, y: {y_min:.2f}-{y_max:.2f})"
         )
-        logger.log(LogLevel.WARNING, log_message)
+        imod_logger.warning(log_message)
     
     return clipped
 
