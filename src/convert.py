@@ -296,6 +296,10 @@ def main():
             # so that it is consistent to what primod writes.
             settings.out_dir = settings.out_dir / "modflow6"
             settings.out_dir.mkdir(parents=True, exist_ok=True)
+            if settings.dump_netcdf:
+                netcdf_dump_dir = settings.out_dir.with_name(f"{settings.out_dir.name}_netcdf")
+                imod_logger.info(f"Writing Modflow6 simulation to NetCDF format at {netcdf_dump_dir}")
+                simulation.dump(netcdf_dump_dir)
         else:
             write_kwargs = {
                 "modflow6_dll": settings.bin_dir/"modflow6"/"libmf6.dll",
@@ -305,8 +309,6 @@ def main():
             }
         # Write coupling to disk
         simulation.write(settings.out_dir, **write_kwargs)
-        if settings.dump_netcdf:
-            simulation.dump(settings.out_dir.with_name(f"{settings.out_dir.name}_netcdf"))
         # Run coupled simulation
         # simulation.run()
     except Exception:
