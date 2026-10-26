@@ -43,55 +43,10 @@ from imod.common.utilities.clip import clip_line_gdf_by_bounding_polygon
 from imod.formats.gen import read, write
 from imod.typing import GeoDataFrameType
 from imod.typing.grid import as_ugrid_dataarray
-from imod.util.spatial import empty_2d, spatial_reference
+from imod.util.spatial import spatial_reference
 from scipy.spatial import cKDTree
 
-
-def _target_grid(
-    like: xr.DataArray | None,
-    window: tuple[float, float, float, float] | None,
-    cellsize: float | None,
-) -> xr.DataArray:
-    if window is not None:
-        xmin, ymin, xmax, ymax = window
-        if not np.isfinite(window).all() or xmin >= xmax or ymin >= ymax:
-            raise ValueError(
-                "window must contain finite xmin, ymin, xmax, ymax with "
-                "xmin < xmax and ymin < ymax."
-            )
-
-    if like is not None:
-        if cellsize is not None:
-            raise ValueError("cellsize cannot be combined with like.")
-        if like.ndim != 2 or set(like.dims) != {"x", "y"}:
-            raise ValueError(
-                "like must be a two-dimensional grid with x and y dimensions."
-            )
-        if window is not None:
-            x = like["x"]
-            y = like["y"]
-            like = like.sel(
-                x=x[(x >= xmin) & (x <= xmax)],
-                y=y[(y >= ymin) & (y <= ymax)],
-            )
-        if like.sizes["x"] == 0 or like.sizes["y"] == 0:
-            raise ValueError(
-                "window must select at least one grid cell in each dimension."
-            )
-        return like
-
-    if window is None or cellsize is None:
-        raise ValueError("Provide like, or both window and cellsize.")
-    if not np.isfinite(cellsize) or cellsize <= 0.0:
-        raise ValueError("cellsize must be finite and greater than zero.")
-    return empty_2d(
-        dx=cellsize,
-        xmin=xmin,
-        xmax=xmax,
-        dy=-cellsize,
-        ymin=ymin,
-        ymax=ymax,
-    )
+from src.grid_helpers import create_target_grid
 
 
 def _extend_line_end(line: shapely.LineString, grid) -> shapely.LineString:
@@ -270,7 +225,7 @@ def snap_gen_to_grid(
         Snapped geometries with original attributes and CRS, in input order,
         with a new positional index. The input is not modified.
     """
-    target = _target_grid(like, window, cellsize)
+    target = create_target_grid(like, window, cellsize)
     if not np.isfinite(max_snap_distance) or max_snap_distance < 0.0:
         raise ValueError("max_snap_distance must be finite and non-negative.")
 

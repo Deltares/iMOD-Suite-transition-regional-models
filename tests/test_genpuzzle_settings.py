@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from settings import GenPuzzleSettings, read_genpuzzle_settings
+from src.settings import GenPuzzleSettings, read_genpuzzle_settings
 
 
 @pytest.fixture

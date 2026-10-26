@@ -8,7 +8,7 @@ import pytest
 import shapely
 from matplotlib.figure import Figure
 
-from genpuzzle import genpuzzle
+from src.genpuzzle import genpuzzle
 
 DATA_DIR = Path(__file__).parent / "data"
 GENFILE_IN = DATA_DIR / "genpuzzle_test.gen"

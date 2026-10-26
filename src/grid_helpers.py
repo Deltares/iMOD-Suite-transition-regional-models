@@ -42,16 +42,17 @@ def create_target_grid(
     window: tuple[float, float, float, float] | None,
     cellsize: float | None,
 ) -> xr.DataArray:
-    if (window is None) != (cellsize is None):
-        raise ValueError("Provide both window and cellsize together.")
-        
     if window is not None:
         _validate_window(window)
         xmin, ymin, xmax, ymax = window
 
     if like is not None:
+        if cellsize is not None:
+            raise ValueError("Cannot provide both like and cellsize.")
         return _create_grid_from_like(like, window)
     else:
+        if window is None or cellsize is None:
+            raise ValueError("Provide both window and cellsize together.")
         _validate_cellsize(cellsize)
         return empty_2d(
             dx=cellsize,
