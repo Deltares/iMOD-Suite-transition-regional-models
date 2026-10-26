@@ -16,7 +16,7 @@ from src.snapping import snap_gen_file_to_grid
 _CHOICES = ["convert", "gensnaptogrid"]
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Convert iMOD5 project to MODFLOW 6 and MetaSwap simulation"
+        description="CLI for executing iMOD-Suite transition regional models functions"
     )
     parser.add_argument(
         "function", 
