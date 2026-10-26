@@ -8,6 +8,7 @@ version = "0.1.0"
 [tasks]
 convert = { cmd="python -m src.cli convert", description="Convert iMOD5 data to MODFLOW 6 and MetaSwap model." }
 gensnaptogrid = { cmd="python -m src.cli gensnaptogrid", description="Snap GEN line features to the edges of a structured grid." }
+genpuzzle = {cmd = "python src/genpuzzle.py", description = "Create a GEN file, where all loose ends are connected to form a continuous segment"}
 
 [dependencies]
 bottleneck = "*"
