@@ -44,7 +44,6 @@ def create_target_grid(
 ) -> xr.DataArray:
     if window is not None:
         _validate_window(window)
-        xmin, ymin, xmax, ymax = window
 
     if like is not None:
         if cellsize is not None:
@@ -54,6 +53,7 @@ def create_target_grid(
         if window is None or cellsize is None:
             raise ValueError("Provide both window and cellsize together.")
         _validate_cellsize(cellsize)
+        xmin, ymin, xmax, ymax = window
         return empty_2d(
             dx=cellsize,
             xmin=xmin,
