@@ -4,16 +4,18 @@ import shutil
 from pathlib import Path
 
 from src.convert import convert_model
+from src.genpuzzle import genpuzzle
 from src.log import add_filehandler, imod_logger, init_logging
 from src.settings import (
     ConvertSettings,
     GenSnapToGridSettings,
     read_convert_settings,
     read_gen_snap_to_grid_settings,
+    read_genpuzzle_settings,
 )
 from src.snapping import snap_gen_file_to_grid
 
-_CHOICES = ["convert", "gensnaptogrid"]
+_CHOICES = ["convert", "gensnaptogrid", "genpuzzle"]
 def parse_args():
     parser = argparse.ArgumentParser(
         description="CLI for executing iMOD-Suite transition regional models functions"
@@ -41,7 +43,7 @@ def _convert(ini_file: Path):
 def _gensnaptogrid(ini_file: Path):
     settings: GenSnapToGridSettings = read_gen_snap_to_grid_settings(ini_file)
     add_filehandler(
-        settings.genfile_in.with_name("snap_gen_to_grid.log"), settings.log_level
+        settings.genfile_in.with_name("gensnaptogrid.log"), settings.log_level
     )
     snap_gen_file_to_grid(
         genfile_in=settings.genfile_in,
@@ -53,6 +55,14 @@ def _gensnaptogrid(ini_file: Path):
         overwrite=settings.overwrite,
     )
 
+def _genpuzzle(ini_file: Path):
+    settings = read_genpuzzle_settings(ini_file)
+    add_filehandler(
+        settings.genfile_in.with_name("genpuzzle.log"), settings.log_level
+    )
+    genpuzzle(settings.genfile_in, settings.genfile_out, settings.tolerance)
+
+
 def main():
     args = parse_args()
     init_logging()
@@ -63,6 +73,8 @@ def main():
                 _convert(args.inifile)
             case "gensnaptogrid":
                 _gensnaptogrid(args.inifile)
+            case "genpuzzle":
+                _genpuzzle(args.inifile)
             case _:
                 raise ValueError(f"Unknown function specified, must be one of {_CHOICES}, got {args.function}.")
 
