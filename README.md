@@ -77,6 +77,7 @@ Arguments supported:
 | `INTERVAL` | No | `D` | String | Time step interval code (for example `D` for daily). [Anything accepted by pandas is supported](https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases) |
 | `COUPLER_DIR` | No* | None | Directory path (string) | Path to the folder containing coupler binaries/executables. |
 | `MSW_DBASE` | No* | None | Directory path (string) | Path to the MetaSWAP database directory used during conversion. |
+| `DUMP_NETCDF` | No | `false` | Boolean | Additionally write model in binary netcdf format to `<OUTPUT_FOLDER>_netcdf` |
 | `WINDOW` | No** | `None` | Comma-separated numbers | Spatial extent as `xmin,ymin,xmax,ymax` in model coordinates. |
 | `CELLSIZE` | No** | `None` | Number (integer/float) | Target horizontal grid cell size (typically in meters). |
 | `LOGLEVEL` | NO | `INFO` | Number (integer) or string. | The level of verbosity in the log file, choose from [`DEBUG`/`10`, `INFO`/`20`, `WARNING`/`30`, `ERROR`/`40`, `CRITICAL`/`50`] |
