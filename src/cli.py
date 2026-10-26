@@ -13,7 +13,7 @@ from src.settings import (
 )
 from src.snapping import snap_gen_file_to_grid
 
-
+_CHOICES = ["convert", "gensnaptogrid"]
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Convert iMOD5 project to MODFLOW 6 and MetaSwap simulation"
@@ -21,7 +21,7 @@ def parse_args():
     parser.add_argument(
         "function", 
         type=str, 
-        choices=["convert", "gensnaptogrid"],
+        choices=_CHOICES,
         help="Function to execute",
     )
     parser.add_argument("inifile", type=Path, help="Path to the ini file with settings")
@@ -59,12 +59,12 @@ def main():
 
     try:
         match args.function:
-            case "CONVERT":
+            case "convert":
                 _convert(args.inifile)
-            case "GENSNAPTOGRID":
+            case "gensnaptogrid":
                 _gensnaptogrid(args.inifile)
             case _:
-                raise ValueError(f"Unknown function specified, must be one of CONVERT or GENSNAPTOGRID, got {args.function}.")
+                raise ValueError(f"Unknown function specified, must be one of {_CHOICES}, got {args.function}.")
 
     except Exception:
         # this includes traceback in the logs
