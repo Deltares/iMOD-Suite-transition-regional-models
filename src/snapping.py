@@ -35,6 +35,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import shapely
 import xarray as xr
 import xugrid as xu
@@ -123,6 +124,104 @@ def _extend_line_end(line: shapely.LineString, grid) -> shapely.LineString:
     return shapely.LineString(np.vstack([coordinates, new_end]))
 
 
+def _assert_only_line_geometries(geometry: gpd.GeoSeries) -> None:
+    """Raise if any geometry is missing, empty, or not a LineString."""
+    if (
+        geometry.isna().any()
+        or geometry.is_empty.any()
+        or (geometry.geom_type != "LineString").any()
+    ):
+        raise ValueError("Input geometries must be non-empty LineStrings.")
+
+
+def _clip_to_grid(original: GeoDataFrameType, target: xr.DataArray) -> gpd.GeoDataFrame:
+    """
+    Clip the lines to the extent of the grid, as 2D lines.
+
+    Clipping explodes lines into parts. The ``position`` column holds the row of
+    ``original`` each part comes from.
+    """
+    _, xmin, xmax, _, ymin, ymax = spatial_reference(target)
+    mask = gpd.GeoDataFrame(
+        geometry=[shapely.box(xmin, ymin, xmax, ymax)], crs=original.crs
+    )
+    lines_2d = gpd.GeoDataFrame(
+        geometry=shapely.force_2d(original.geometry.to_numpy()), crs=original.crs
+    )
+    clipped = clip_line_gdf_by_bounding_polygon(lines_2d, mask)
+    clipped["position"] = clipped.index.get_level_values(0).to_numpy()
+    return clipped.reset_index(drop=True)
+
+
+def _snap_vertices_to_nodes(
+    lines: gpd.GeoDataFrame, grid, max_snap_distance: float
+) -> gpd.GeoDataFrame:
+    """
+    Move vertices within ``max_snap_distance`` onto the nearest grid node and
+    drop lines that collapse to a point.
+
+    Done before snapping to edges so that collapsed lines never reach xugrid's
+    edge allocator, which cannot handle zero intersected segments.
+    """
+    coordinates = shapely.get_coordinates(lines.geometry)
+    distances, nodes = cKDTree(grid.node_coordinates).query(coordinates)
+    within_distance = distances <= max_snap_distance
+    coordinates[within_distance] = grid.node_coordinates[nodes[within_distance]]
+    lines = lines.copy()
+    lines.geometry = shapely.set_coordinates(
+        lines.geometry.to_numpy().copy(), coordinates
+    )
+    return lines.loc[lines.geometry.length > 0.0].reset_index(drop=True)
+
+
+def _extend_last_feature(
+    snapped: pd.DataFrame, lines: gpd.GeoDataFrame, last_position: int, grid
+) -> pd.DataFrame:
+    """
+    Snap the edge of the end cell of the last feature, as iMOD5 does.
+
+    This only happens if that feature already snaps to at least one edge: a line
+    within a single cell snaps to nothing, and extending it would wrongly give
+    it edges. Only the extended line is snapped again.
+    """
+    last_rows = np.flatnonzero(lines["position"].to_numpy() == last_position)
+    if last_rows.size == 0 or not np.isin(last_rows[-1], snapped["line_index"]):
+        return snapped
+    row = int(last_rows[-1])
+    extended = gpd.GeoDataFrame(
+        geometry=[_extend_line_end(lines.geometry.iloc[row], grid)], crs=lines.crs
+    )
+    extended_snapped = xu.create_snap_to_grid_dataframe(
+        extended, grid, max_snap_distance=0.0
+    )
+    extended_snapped["line_index"] = row
+    return pd.concat(
+        [snapped[snapped["line_index"] != row], extended_snapped], ignore_index=True
+    )
+
+
+def _edges_to_geometries(
+    snapped: pd.DataFrame, lines: gpd.GeoDataFrame, grid
+) -> tuple[list[int], list[shapely.geometry.base.BaseGeometry]]:
+    """
+    Merge the snapped edges into one geometry per original row.
+
+    Returns the positions of the original rows and their geometries, in input
+    order. Edges hit twice by the same row are kept once.
+    """
+    edge_coordinates = grid.node_coordinates[grid.edge_node_connectivity]
+    snapped = snapped.assign(
+        position=lines["position"].to_numpy()[snapped["line_index"].to_numpy()]
+    ).drop_duplicates(["position", "edge_index"])
+    positions = []
+    geometries = []
+    for position, group in snapped.groupby("position", sort=True):
+        segments = shapely.linestrings(edge_coordinates[group["edge_index"].to_numpy()])
+        positions.append(position)
+        geometries.append(shapely.line_merge(shapely.multilinestrings(segments)))
+    return positions, geometries
+
+
 def snap_gen_to_grid(
     gdf: GeoDataFrameType,
     like: xr.DataArray | None = None,
@@ -131,7 +230,7 @@ def snap_gen_to_grid(
     max_snap_distance: float = 0.0,
 ) -> GeoDataFrameType:
     """
-    Snap 2D line features to the cell edges of a structured grid.
+    Snap line features to the cell edges of a structured grid.
 
     The edge selection follows iMOD5's GENSNAPTOGRID: a line selects an edge
     when it crosses the segment joining the centres of the two cells sharing 
@@ -147,7 +246,8 @@ def snap_gen_to_grid(
     Parameters
     ----------
     gdf : geopandas.GeoDataFrame
-        Non-empty 2D LineString geometries and their attributes.
+        Non-empty LineString geometries and their attributes. Z values are
+        ignored.
     like : xarray.DataArray, optional
         Two-dimensional grid with x and y coordinates. Data values, including
         nodata, do not affect the target grid.
@@ -174,79 +274,36 @@ def snap_gen_to_grid(
     if not np.isfinite(max_snap_distance) or max_snap_distance < 0.0:
         raise ValueError("max_snap_distance must be finite and non-negative.")
 
-    geometry = gdf.geometry
-    if (
-        geometry.isna().any()
-        or geometry.is_empty.any()
-        or (geometry.geom_type != "LineString").any()
-        or shapely.has_z(geometry).any()
-    ):
-        raise ValueError("Input geometries must be non-empty 2D LineStrings.")
+    _assert_only_line_geometries(gdf.geometry)
 
     original = gdf.reset_index(drop=True)
     if original.empty:
         return original
+    empty = original.iloc[:0].copy()
 
-    active = xr.ones_like(target, dtype=bool)
-    grid = as_ugrid_dataarray(active).grid
+    grid = as_ugrid_dataarray(xr.ones_like(target, dtype=bool)).grid
     if grid.n_face == 1:
-        return original.iloc[:0].copy()
-    edge_coordinates = grid.node_coordinates[grid.edge_node_connectivity]
+        return empty
 
-    _, xmin, xmax, _, ymin, ymax = spatial_reference(target)
-    mask = gpd.GeoDataFrame(
-        geometry=[shapely.box(xmin, ymin, xmax, ymax)], crs=original.crs
-    )
-    clipped = clip_line_gdf_by_bounding_polygon(
-        original.geometry.to_frame(name="geometry"), mask
-    )
+    clipped = _clip_to_grid(original, target)
     if clipped.empty:
-        return original.iloc[:0].copy()
+        return empty
 
     # iMOD5 only extends the end of the last feature that reaches the grid, so
     # find it before lines collapsed by vertex snapping are dropped.
-    last_position = clipped.index.get_level_values(0).max()
+    last_position = clipped["position"].max()
 
-    # Snap vertices first so lines collapsed to a node never reach xugrid's
-    # edge allocator, which cannot handle zero intersected segments.
-    coordinates = shapely.get_coordinates(clipped.geometry)
-    distances, nodes = cKDTree(grid.node_coordinates).query(coordinates)
-    within_distance = distances <= max_snap_distance
-    coordinates[within_distance] = grid.node_coordinates[nodes[within_distance]]
-    clipped.geometry = shapely.set_coordinates(
-        clipped.geometry.to_numpy().copy(), coordinates
+    lines = _snap_vertices_to_nodes(clipped, grid, max_snap_distance)
+    if lines.empty:
+        return empty
+    snapped = xu.create_snap_to_grid_dataframe(
+        lines[["geometry"]], grid, max_snap_distance=0.0
     )
-    clipped = clipped.loc[clipped.geometry.length > 0.0]
-    if clipped.empty:
-        return original.iloc[:0].copy()
-
-    # Clipping explodes parts; xugrid indices refer to these rows, not originals.
-    original_positions = clipped.index.get_level_values(0).to_numpy()
-    lines = clipped.reset_index(drop=True)
-    snapped = xu.create_snap_to_grid_dataframe(lines, grid, max_snap_distance=0.0)
     if snapped.empty:
-        return original.iloc[:0].copy()
+        return empty
 
-    # iMOD5 also snaps the edge of the end cell, but only for the last feature
-    # of the file, and only if it snaps to at least one edge: a line within a
-    # single cell snaps to nothing.
-    last_rows = np.flatnonzero(original_positions == last_position)
-    if last_rows.size > 0 and np.isin(last_rows[-1], snapped["line_index"]):
-        row = last_rows[-1]
-        geometries_array = lines.geometry.to_numpy().copy()
-        geometries_array[row] = _extend_line_end(geometries_array[row], grid)
-        lines.geometry = geometries_array
-        snapped = xu.create_snap_to_grid_dataframe(lines, grid, max_snap_distance=0.0)
-
-    snapped["line_index"] = original_positions[snapped["line_index"].to_numpy()]
-    snapped = snapped.drop_duplicates(["line_index", "edge_index"])
-
-    positions = []
-    geometries = []
-    for position, group in snapped.groupby("line_index", sort=True):
-        segments = shapely.linestrings(edge_coordinates[group["edge_index"].to_numpy()])
-        positions.append(position)
-        geometries.append(shapely.line_merge(shapely.multilinestrings(segments)))
+    snapped = _extend_last_feature(snapped, lines, last_position, grid)
+    positions, geometries = _edges_to_geometries(snapped, lines, grid)
 
     result = original.iloc[positions].copy()
     result.geometry = geometries

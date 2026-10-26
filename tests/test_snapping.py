@@ -163,15 +163,26 @@ def test_snap_gen_to_grid_invalid_distance(like, distance):
     "geometry",
     [
         shapely.Point(1, 1),
-        shapely.LineString([(1, 1, 0), (3, 3, 0)]),
         shapely.LineString(),
         None,
     ],
 )
 def test_snap_gen_to_grid_rejects_invalid_geometry(like, geometry):
     original = gpd.GeoDataFrame(geometry=[geometry])
-    with pytest.raises(ValueError, match="non-empty 2D LineString"):
+    with pytest.raises(ValueError, match="non-empty LineString"):
         snap_gen_to_grid(original, like=like)
+
+
+def test_snap_gen_to_grid_ignores_z(like):
+    xy = [(0.1, 1.1), (3.9, 1.1)]
+    original_2d = gpd.GeoDataFrame({"id": ["a"]}, geometry=[shapely.LineString(xy)])
+    original_3d = gpd.GeoDataFrame(
+        {"id": ["a"]},
+        geometry=[shapely.LineString([(x, y, 5.0) for x, y in xy])],
+    )
+    actual = snap_gen_to_grid(original_3d, like=like)
+    assert not shapely.has_z(actual.geometry).any()
+    assert_geodataframe_equal(actual, snap_gen_to_grid(original_2d, like=like))
 
 
 def test_snap_gen_to_grid_public_api(like):
