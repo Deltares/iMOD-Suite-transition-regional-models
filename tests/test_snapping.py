@@ -8,7 +8,7 @@ from geopandas.testing import assert_geodataframe_equal
 from imod.typing.grid import as_ugrid_dataarray
 from imod.util import empty_2d
 
-from snapping import _target_grid, snap_gen_file_to_grid, snap_gen_to_grid
+from src.snapping import _target_grid, snap_gen_file_to_grid, snap_gen_to_grid
 
 
 @pytest.fixture

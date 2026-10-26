@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from imod.logging import LogLevel, logger
 from imod.mf6.model import Modflow6Model
 from imod.mf6.wel import Well
 from imod.util.spatial import spatial_reference
-from imod.logging import logger, LogLevel
 
 
 def domain_bounds(domain) -> tuple[float, float, float, float]:

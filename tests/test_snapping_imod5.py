@@ -30,7 +30,7 @@ import pytest
 import shapely
 from matplotlib.figure import Figure
 
-from snapping import snap_gen_file_to_grid
+from src.snapping import snap_gen_file_to_grid
 
 IMOD5_EXE = Path(
     os.environ.get(

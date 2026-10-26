@@ -12,9 +12,9 @@ from imod.mf6.oc import OutputControl
 from imod.mf6.simulation import Modflow6Simulation
 from primod import MetaMod, MetaModDriverCoupling
 
-from clipping import clip_wel_packages_to_domain
-from log import add_filehandler, imod_logger, init_logging
-from settings import ConvertSettings, read_convert_settings
+from src.clipping import clip_wel_packages_to_domain
+from src.log import add_filehandler, imod_logger, init_logging
+from src.settings import ConvertSettings, read_convert_settings
 
 
 def create_target_grid(
@@ -257,35 +257,3 @@ def convert_model(settings: ConvertSettings):
     # Run coupled simulation
     # simulation.run()
 
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Convert iMOD5 project to MODFLOW 6 and MetaSwap simulation")
-    parser.add_argument("inifile", type=Path, help="Path to the ini file with settings")
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-    init_logging()
-    try:
-        # Read settings from ini file
-        settings: ConvertSettings = read_convert_settings(args.inifile)
-        
-        # Remove existing output directory if overwrite is enabled
-        if settings.overwrite and settings.out_dir.is_dir():
-            shutil.rmtree(settings.out_dir, ignore_errors=True)
-        settings.out_dir.mkdir(parents=True, exist_ok=True)
-
-        # Add file handler for logging to a file in the output directory
-        logfile_path = settings.out_dir / "conversion_log.txt"
-        add_filehandler(logfile_path, settings.log_level)
-
-        # Convert
-        convert_model(settings)
-
-    except Exception:
-        imod_logger.exception("An error occurred during the conversion process.") # this includes traceback in the logs
-        raise
-
-if __name__ == "__main__":
-    main()

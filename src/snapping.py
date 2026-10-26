@@ -1,6 +1,5 @@
 """Snap GEN line features to the edges of a structured grid."""
 
-import argparse
 from pathlib import Path
 
 import geopandas as gpd
@@ -14,9 +13,6 @@ from imod.typing import GeoDataFrameType
 from imod.typing.grid import as_ugrid_dataarray
 from imod.util.spatial import empty_2d, spatial_reference
 from scipy.spatial import cKDTree
-
-from log import add_filehandler, imod_logger, init_logging
-from settings import GenSnapToGridSettings, read_gen_snap_to_grid_settings
 
 
 def _target_grid(
@@ -282,34 +278,3 @@ def snap_gen_file_to_grid(
         raise ValueError("No line features could be snapped to grid edges.")
     feature_type = "feature_type" if "feature_type" in snapped.columns else None
     write(destination, snapped.explode(ignore_index=True), feature_type=feature_type)
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Snap GEN file lines to a grid and write a binary GEN file"
-    )
-    parser.add_argument("inifile", type=Path, help="Path to the ini file with settings")
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-    init_logging()
-    try:
-        settings: GenSnapToGridSettings = read_gen_snap_to_grid_settings(args.inifile)
-        add_filehandler(settings.genfile_in.with_name("snap_gen_to_grid.log"), settings.log_level)
-        snap_gen_file_to_grid(
-            genfile_in=settings.genfile_in,
-            genfile_out=settings.genfile_out,
-            like=settings.like,
-            window=settings.window,
-            cellsize=settings.cellsize,
-            max_snap_distance=settings.max_snap_distance,
-            overwrite=settings.overwrite,
-        )
-    except Exception:
-        imod_logger.exception("Error snapping GEN file to grid")
-        raise
-
-if __name__ == "__main__":
-    main()
