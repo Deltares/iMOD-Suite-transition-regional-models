@@ -11,6 +11,7 @@ import shapely
 import xugrid as xu
 
 from logging_helpers import imod_logger, init_logging
+from settings import read_genpuzzle_settings
 
 DEFAULT_TOLERANCE = 0.001
 
@@ -220,14 +221,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Connect loose line segments in a GEN file into continuous segments"
     )
-    parser.add_argument("genfile_in", type=Path, help="Path to input GEN file")
-    parser.add_argument("genfile_out", type=Path, help="Path to output GEN file")
-    parser.add_argument(
-        "--tolerance",
-        type=float,
-        default=DEFAULT_TOLERANCE,
-        help=f"Snapping tolerance in map units (default: {DEFAULT_TOLERANCE})",
-    )
+    parser.add_argument("inifile", type=Path, help="Path to the ini file with settings")
     return parser.parse_args()
 
 
@@ -236,7 +230,8 @@ def main():
     args = parse_args()
     init_logging()
     try:
-        genpuzzle(args.genfile_in, args.genfile_out, args.tolerance)
+        settings = read_genpuzzle_settings(args.inifile)
+        genpuzzle(settings.genfile_in, settings.genfile_out, settings.tolerance)
     except Exception:
         imod_logger.exception("An error occurred during the GENPUZZLE process.")
         raise

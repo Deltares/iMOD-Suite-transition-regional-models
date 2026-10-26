@@ -20,6 +20,8 @@ from pydantic import (
 imod_logger = logging.getLogger("imod")
 
 _GENSNAPTOGRID = "GENSNAPTOGRID"
+_GENPUZZLE = "GENPUZZLE"
+_DEFAULT_TOLERANCE = 0.001
 
 IssMode = Annotated[
     # normalize input to lowercase and strip whitespace
@@ -284,6 +286,33 @@ class GenSnapToGridSettings(GenBaseSettings):
         return self
 
 
+class GenPuzzleSettings(GenBaseSettings):
+    """
+    Settings for the GENPUZZLE function: connect loose line segments in a GEN file
+    into continuous segments, following the GENPUZZLE function in iMOD5.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    tolerance: float = Field(_DEFAULT_TOLERANCE, gt=0, alias="tolerance")
+
+    @field_validator("function", mode="before")
+    @classmethod
+    def _check_function(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip().upper() == _GENPUZZLE:
+            return _GENPUZZLE
+        raise ValueError(f"FUNCTION must be {_GENPUZZLE}. Got: {v!r}")
+
+    @model_validator(mode="after")
+    def _check_consistency(self) -> "GenPuzzleSettings":
+        if self.genfile_out.exists() and not self.overwrite:
+            raise ValueError(
+                f"Output GEN file already exists: {self.genfile_out}, "
+                "please either remove it or set 'overwrite' to True."
+            )
+        return self
+
+
 def _read_ini[T: BaseModel](model: type[T], inifile: Path | str) -> T:
     imod_logger.info(f"Reading settings from {inifile}")
     inifile = Path(inifile)
@@ -302,3 +331,7 @@ def read_convert_settings(inifile: Path | str) -> ConvertSettings:
 
 def read_gen_snap_to_grid_settings(inifile: Path | str) -> GenSnapToGridSettings:
     return _read_ini(GenSnapToGridSettings, inifile)
+
+
+def read_genpuzzle_settings(inifile: Path | str) -> GenPuzzleSettings:
+    return _read_ini(GenPuzzleSettings, inifile)

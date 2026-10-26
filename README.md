@@ -96,13 +96,13 @@ This is the equivalent of the GENPUZZLE batch function in iMOD5. In addition the
 If you installed with pixi:
 
 ```powershell
-pixi run genpuzzle <GENFILE_IN> <GENFILE_OUT> [--tolerance <map units>]
+pixi run genpuzzle <name of your ini file>
 ```
 
 For example:
 
 ```powershell
-pixi run genpuzzle example.gen example_connected.gen --tolerance 0.1
+pixi run genpuzzle genpuzzle_example.ini
 ```
 
 If you followed the offline installation instructions, the commands are slightly
@@ -110,15 +110,17 @@ different:
 
 ```powershell
 .\activate.bat
-python genpuzzle.py <GENFILE_IN> <GENFILE_OUT> [--tolerance <map units>]
+python genpuzzle <name of your ini file>
 ```
 
 ### Configuration
 
-Arguments supported:
+Keywords supported in the ini file:
 
-| Argument | Required | Default/Fallback | Datatype | Brief explanation |
+| Keyword | Required | Default/Fallback | Datatype | Brief explanation |
 | --- | --- | --- | --- | --- |
-| `GENFILE_IN` | Yes | None | Path (string) | Path to the input GEN file. |
+| `FUNCTION` | Yes | None | String | Must be `GENPUZZLE`. |
+| `GENFILE_IN` | Yes | None | Path (string) | Path to the input GEN file. Binary or ASCII GEN files are accepted. |
 | `GENFILE_OUT` | Yes | None | Path (string) | Path where the output GEN file will be written. |
-| `tolerance` | No | `0.0001` | Number (float) | Maximum distance in map units within which line endpoints are snapped together. |
+| `OVERWRITE` | No | `false` | Boolean | Allow overwriting an existing output GEN file. |
+| `TOLERANCE` | No | `0.001` | Number (float) | Maximum distance in map units within which line endpoints are snapped together. `0.001` matches iMOD5 tolerance.|
