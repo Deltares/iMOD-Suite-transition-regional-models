@@ -8,6 +8,9 @@ input, iMOD5 output, our output, ini file, and iMOD5 console output are kept in
 that folder for inspection, together with a text diff and a comparison plot
 (green: input, red: ours, blue dashed: iMOD5).
 
+Small probe cases run on tiny grids; the ``large`` grid (1040 x 1320 cells, as
+in a regional model) runs a generated file with many meandering lines.
+
 Our snapper and iMOD5 are each run once per case. Behaviour established with
 these cases is described in the docstring of ``snapping.snap_gen_to_grid``.
 
@@ -106,10 +109,11 @@ CASES = {
     "tie-diagonal": [[(1.5, 1.5), (2.5, 2.5)]],
 }
 
-# name: (xmin, ymin, cellsize)
+# name: (xmin, ymin, cellsize, ncols, nrows)
 GRIDS = {
-    "unit": (0.0, 0.0, 1.0),
-    "rd": (100_000.0, 400_000.0, 100.0),
+    "unit": (0.0, 0.0, 1.0, 4, 4),
+    "rd": (100_000.0, 400_000.0, 100.0, 4, 4),
+    "large": (175_000.0, 364_000.0, 25.0, 1040, 1320),
 }
 
 # Type aliases for clarity
@@ -119,6 +123,48 @@ Coord = tuple[float, float]
 Line = list[Coord]
 Window = tuple[float, float, float, float]
 Edge = tuple[tuple[int, int], tuple[int, int]]
+
+
+def make_meandering_lines(ncols: int, nrows: int, seed: int = 42) -> list[Line]:
+    """
+    Synthetic stand-in for a real-world GEN file, in units of cells: meandering
+    watercourses with many vertices, cut off where they leave the grid, and one
+    long straight line (e.g. a dike) crossing the whole grid.
+
+    Step lengths of 0.2 to 6 cells correspond to 5 to 150 m on a 25 m grid.
+    """
+    rng = np.random.default_rng(seed)
+    lines: list[Line] = []
+    for _ in range(25):
+        x = rng.uniform(0.0, ncols)
+        y = rng.uniform(0.0, nrows)
+        heading = rng.uniform(0.0, 2.0 * np.pi)
+        line: Line = [(x, y)]
+        for _ in range(rng.integers(100, 400)):
+            heading += rng.normal(0.0, 0.4)
+            step = rng.uniform(0.2, 6.0)
+            x += step * np.cos(heading)
+            y += step * np.sin(heading)
+            if not (0.0 <= x <= ncols and 0.0 <= y <= nrows):
+                break
+            line.append((x, y))
+        if len(line) > 1:
+            lines.append(line)
+    lines.append([(-20.0, 49.38), (ncols + 20.0, nrows - 172.868)])
+    return lines
+
+
+# Cases per grid.
+CASES_BY_GRID = {
+    "unit": CASES,
+    "rd": CASES,
+    "large": {"meanders": make_meandering_lines(*GRIDS["large"][3:])},
+}
+GRID_CASES = [
+    pytest.param(grid, case, id=f"{case}-{grid}")
+    for grid, cases in CASES_BY_GRID.items()
+    for case in cases
+]
 
 # Cases where our result is known to differ from iMOD5 5.6.1: reported as xfail.
 KNOWN_DIFFERENCES = {
@@ -272,13 +318,13 @@ def save_comparison_plot(
 
 
 def prepare_case(case: str, grid: str, work_dir: Path) -> tuple[Path, Path, list[Line], Window, float]:
-    xmin, ymin, cellsize = GRIDS[grid]
-    window = (xmin, ymin, xmin + 4 * cellsize, ymin + 4 * cellsize)
+    xmin, ymin, cellsize, ncols, nrows = GRIDS[grid]
+    window = (xmin, ymin, xmin + ncols * cellsize, ymin + nrows * cellsize)
     case_dir = work_dir / f"{grid}_{case}"
     case_dir.mkdir(parents=True, exist_ok=True)
     lines: list[Line] = [
         [(xmin + x * cellsize, ymin + y * cellsize) for x, y in line]
-        for line in CASES[case]
+        for line in CASES_BY_GRID[grid][case]
     ]
     gen_in = case_dir / "input.gen"
     write_ascii_gen(gen_in, lines)
@@ -314,10 +360,9 @@ def imod5_works(tmp_path_factory: pytest.TempPathFactory) -> None:
         )
 
 
-@pytest.mark.parametrize("grid", list(GRIDS))
-@pytest.mark.parametrize("case", list(CASES))
+@pytest.mark.parametrize("grid, case", GRID_CASES)
 def test_snap_matches_imod5(tmp_path: Path, case: str, grid: str):
-    xmin, ymin, cellsize = GRIDS[grid]
+    xmin, ymin, cellsize, ncols, nrows = GRIDS[grid]
     case_dir, gen_in, lines, window, cellsize = prepare_case(case, grid, tmp_path)
 
     ours = snap_with_ours(gen_in, case_dir / "ours.gen", window, cellsize)
@@ -329,97 +374,25 @@ def test_snap_matches_imod5(tmp_path: Path, case: str, grid: str):
     only_in_ours = sorted(ours_edges - imod5_edges)
     only_in_imod5 = sorted(imod5_edges - ours_edges)
     has_differences = bool(only_in_ours or only_in_imod5)
-    
+
+    # Large grids can differ in many edges: show the first few.
+    shown = 50
     report = (
         f"Edges differ (grid node indices; files in {case_dir}).\n"
-        f"Only ours ({len(only_in_ours)}): {only_in_ours}\n"
-        f"Only iMOD5 ({len(only_in_imod5)}): {only_in_imod5}\n"
+        f"Edges: ours {len(ours_edges)}, iMOD5 {len(imod5_edges)}\n"
+        f"Only ours ({len(only_in_ours)}): {only_in_ours[:shown]}\n"
+        f"Only iMOD5 ({len(only_in_imod5)}): {only_in_imod5[:shown]}\n"
         f"iMOD5 return code: {returncode}, wrote output: {wrote_output}"
     )
     (case_dir / "diff.txt").write_text(
         report if has_differences else "identical\n", encoding="utf-8"
     )
+    # Do not draw a tick for every cell on a large grid.
+    tick_step = cellsize * max(1, max(ncols, nrows) // 40)
     save_comparison_plot(
-        case_dir / "comparison.png", lines, ours, theirs, window, cellsize
+        case_dir / "comparison.png", lines, ours, theirs, window, cellsize, tick_step
     )
 
     if case in KNOWN_DIFFERENCES and has_differences:
         pytest.xfail(KNOWN_DIFFERENCES[case])
-    assert not has_differences, report
-
-
-# A grid as used for a large regional iMOD5 model: 25 m cells over 26 x 33 km
-# in Dutch RD coordinates (1040 x 1320 cells).
-LARGE_WINDOW: Window = (175_000.0, 364_000.0, 201_000.0, 397_000.0)
-LARGE_CELLSIZE = 25.0
-
-
-def make_large_lines(window: Window, seed: int = 42) -> list[Line]:
-    """
-    Synthetic stand-in for a real-world GEN file: meandering watercourses with
-    many vertices, which are cut off where they leave the window, plus one long
-    straight line (e.g. a dike or road) crossing the whole window.
-    """
-    xmin, ymin, xmax, ymax = window
-    rng = np.random.default_rng(seed)
-    lines: list[Line] = []
-    for _ in range(25):
-        x = rng.uniform(xmin, xmax)
-        y = rng.uniform(ymin, ymax)
-        heading = rng.uniform(0.0, 2.0 * np.pi)
-        line: Line = [(x, y)]
-        for _ in range(rng.integers(100, 400)):
-            heading += rng.normal(0.0, 0.4)
-            step = rng.uniform(5.0, 150.0)
-            x += step * np.cos(heading)
-            y += step * np.sin(heading)
-            if not (xmin <= x <= xmax and ymin <= y <= ymax):
-                break
-            line.append((x, y))
-        if len(line) > 1:
-            lines.append(line)
-    lines.append([(xmin - 500.0, ymin + 1234.5), (xmax + 500.0, ymax - 4321.7)])
-    return lines
-
-
-def test_snap_matches_imod5_large_grid(tmp_path: Path):
-    xmin, ymin, xmax, ymax = LARGE_WINDOW
-    cellsize = LARGE_CELLSIZE
-    case_dir = tmp_path / "large"
-    case_dir.mkdir()
-    lines = make_large_lines(LARGE_WINDOW)
-    gen_in = case_dir / "input.gen"
-    write_ascii_gen(gen_in, lines)
-
-    ours = snap_with_ours(gen_in, case_dir / "ours.gen", LARGE_WINDOW, cellsize)
-    gen_out = case_dir / "imod5.gen"
-    result = run_imod5(case_dir, gen_in, gen_out, LARGE_WINDOW, cellsize)
-    theirs = read_gen_or_empty(gen_out)
-
-    ours_edges = grid_edges(ours, xmin, ymin, cellsize)
-    imod5_edges = grid_edges(theirs, xmin, ymin, cellsize)
-    assert len(imod5_edges) > 1000, "Test input should produce a substantial result"
-
-    only_in_ours = sorted(ours_edges - imod5_edges)
-    only_in_imod5 = sorted(imod5_edges - ours_edges)
-    has_differences = bool(only_in_ours or only_in_imod5)
-    report = (
-        f"Edges differ (grid node indices; files in {case_dir}).\n"
-        f"Edges: ours {len(ours_edges)}, iMOD5 {len(imod5_edges)}\n"
-        f"Only ours ({len(only_in_ours)}): {only_in_ours[:50]}\n"
-        f"Only iMOD5 ({len(only_in_imod5)}): {only_in_imod5[:50]}\n"
-        f"iMOD5 return code: {result.returncode}, wrote output: {gen_out.exists()}"
-    )
-    (case_dir / "diff.txt").write_text(
-        report if has_differences else "identical\n", encoding="utf-8"
-    )
-    save_comparison_plot(
-        case_dir / "comparison.png",
-        lines,
-        ours,
-        theirs,
-        LARGE_WINDOW,
-        cellsize,
-        tick_step=100 * cellsize,
-    )
     assert not has_differences, report
