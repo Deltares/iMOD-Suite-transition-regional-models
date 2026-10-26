@@ -110,6 +110,7 @@ class ConvertSettings(BaseModel):
     interval: str = Field("D", alias="interval")
     bin_dir: DirectoryPath | None = Field(None, alias="coupler_dir")
     msw_dbase: Path | None = Field(None, alias="msw_dbase")  
+    dump_netcdf: bool = Field(False, alias="dump_netcdf")
     # existence checked in validate_msw
     bbox: tuple[float, float, float, float] | None = Field(None, alias="window")
     cellsize: float | None = Field(None, gt=0, alias="cellsize")

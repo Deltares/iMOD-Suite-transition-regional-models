@@ -305,6 +305,8 @@ def main():
             }
         # Write coupling to disk
         simulation.write(settings.out_dir, **write_kwargs)
+        if settings.dump_netcdf:
+            simulation.dump(settings.out_dir.with_name(f"{settings.out_dir.name}_netcdf"))
         # Run coupled simulation
         # simulation.run()
     except Exception:
