@@ -1,6 +1,8 @@
 """
 Compare snapping with the GENSNAPTOGRID function of iMOD5.
 
+Meant to be run locally, as it requires the iMOD5 executable.
+
 Synthetic GEN files are written to ``pytest_tmp_path/<grid>_<case>/``,
 snapped by both implementations, and compared as sets of grid edges. Vertex
 order, line direction, and merging into polylines therefore do not matter. The
@@ -35,17 +37,22 @@ from matplotlib.figure import Figure
 
 from src.snapping import snap_gen_file_to_grid
 
+# If the value of IMOD5_EXE does not point to an existing file, ALL tests in this module will be skipped.
+# The path can be overridden by setting the IMOD5_EXE environment variable.
 IMOD5_EXE = Path(
     os.environ.get(
         "IMOD5_EXE", r"C:\Development\bin\iMOD5\iMOD 5.6.1\iMOD_V5_6_1.exe"
     )
 )
-TIMEOUT_SECONDS = 120
-
 pytestmark = [
     pytest.mark.imod5,
-    pytest.mark.skipif(not IMOD5_EXE.exists(), reason=f"{IMOD5_EXE} not found"),
+    pytest.mark.skipif(
+        not IMOD5_EXE.exists(),
+        reason=f"{IMOD5_EXE} not found. Set the IMOD5_EXE environment variable to the path of the iMOD5 executable."
+    ),
 ]
+
+TIMEOUT_SECONDS = 120
 
 # Lines in units of cells on a 4 x 4 grid, with the origin at (0, 0).
 CASES = {
