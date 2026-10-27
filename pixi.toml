@@ -6,17 +6,19 @@ platforms = ["win-64"]
 version = "0.1.0"
 
 [tasks]
-convert = {cmd = "python src/convert.py", description = "Convert iMOD5 data to MODFLOW 6 and MetaSwap model."}
-genpuzzle = {cmd = "python src/genpuzzle.py", description = "Create a GEN file, where all loose ends are connected to form a continuous segment"}
+convert = { cmd="python -m src.cli convert", description="Convert iMOD5 data to MODFLOW 6 and MetaSwap model." }
+gensnaptogrid = { cmd="python -m src.cli gensnaptogrid", description="Snap GEN line features to the edges of a structured grid." }
+genpuzzle = {cmd = "python -m src.cli genpuzzle", description = "Create a GEN file, where all loose ends are connected to form a continuous segment"}
 
 [dependencies]
 bottleneck = "*"
+certifi = ">=2026.10.19"
 geopandas = ">=1.0.0"
 netCDF4 = "*"
 loguru = "*"
 numpy = ">=2.0"
 pydantic = ">=2.11.0"
-python = ">=3.10"
+python = ">=3.10,<3.14"
 xarray = ">=2025.8.0"
 scipy = "*"
 tomli = "*"
@@ -31,11 +33,10 @@ jupyter = ">=1.1.1,<2"
 pytest = ">=9.1.1,<10"
 
 [feature.github.pypi-dependencies]
-xugrid = { git = "https://github.com/Deltares/xugrid.git" }
-imod_coupler = { git = "https://github.com/Deltares/imod_coupler.git"}
-primod ={ git = "https://github.com/Deltares/imod_coupler.git", subdirectory = "pre-processing" }
-imod  = { git = "https://github.com/Deltares/imod-python.git", branch="issue_#1937_reduce_char_length"}
-
+xugrid = { git="https://github.com/Deltares/xugrid.git", extras=["all"] }
+imod_coupler = { git="https://github.com/Deltares/imod_coupler.git" }
+primod = { git="https://github.com/Deltares/imod_coupler.git", subdirectory="pre-processing" }
+imod = { git="https://github.com/Deltares/imod-python.git" }
 
 [feature.profile.dependencies]
 snakeviz = "*"
@@ -44,21 +45,20 @@ snakeviz = "*"
 git = "*"
 python-build = "*"
 
-
 [feature.build.tasks]
-make_clones_for_dist_dir = {cmd = "mkdir -p ../clones_for_dist", description = "Create directory for cloning repositories to build wheel files for distribution."}
-clone = {cmd = "cd ../clones_for_dist && git clone https://github.com/Deltares/imod-python.git && git clone https://github.com/Deltares/xugrid.git && git clone https://github.com/Deltares/imod_coupler.git", depends-on = ["make_clones_for_dist_dir"], description = "Clone the repositories for imod-python, xugrid, and imod_coupler to build wheel files for distribution."}
-pull_imod = {cmd = "cd ../clones_for_dist/imod-python && git pull"}
-pull_xugrid = {cmd = "cd ../clones_for_dist/xugrid && git pull"}
-pull_coupler = {cmd = "cd ../clones_for_dist/imod_coupler && git pull"}
-build_imod = {cmd = "cd ../clones_for_dist/imod-python && python -m build", depends-on = ["pull_imod"], description = "Build the iMOD Python package."}
-build_xugrid ={ cmd = "cd ../clones_for_dist/xugrid && python -m build", depends-on = ["pull_xugrid"], description = "Build the xugrid Python package."}
-build_coupler ={ cmd = "cd ../clones_for_dist/imod_coupler && python -m build", depends-on = ["pull_coupler"], description = "Build the imod_coupler Python package."}
-build_primod ={ cmd = "cd ../clones_for_dist/imod_coupler/pre-processing && python -m build", depends-on = ["pull_coupler"], description = "Build the primod Python package."}
-build_for_pack = {depends-on = ["build_imod", "build_xugrid", "build_primod", "build_coupler"]}
-pack = { cmd = "pixi-pack --create-executable --environment build --inject ../clones_for_dist/imod-python/dist/imod-1.0.1.dev1-py3-none-any.whl, ../clones_for_dist/xugrid/dist/xugrid-0.15.2-py3-none-any.whl, ../clones_for_dist/imod_coupler/dist/imod_coupler-2024.3.0-py3-none-any.whl, ../clones_for_dist/imod_coupler/pre-processing/dist/primod-2024.3.0-py3-none-any.whl pixi.toml", depends-on = ["build_for_pack"], description = "Create an executable package for distribution using pixi-pack, injecting the built wheel files for imod-python, xugrid, imod_coupler, and primod."}
+make_clones_for_dist_dir = { cmd="mkdir -p ../clones_for_dist", description="Create directory for cloning repositories to build wheel files for distribution." }
+clone = { cmd="cd ../clones_for_dist && git clone https://github.com/Deltares/imod-python.git && git clone https://github.com/Deltares/xugrid.git && git clone https://github.com/Deltares/imod_coupler.git", depends-on=["make_clones_for_dist_dir"], description="Clone the repositories for imod-python, xugrid, and imod_coupler to build wheel files for distribution." }
+pull_imod = { cmd="cd ../clones_for_dist/imod-python && git pull" }
+pull_xugrid = { cmd="cd ../clones_for_dist/xugrid && git pull" }
+pull_coupler = { cmd="cd ../clones_for_dist/imod_coupler && git pull" }
+build_imod = { cmd="cd ../clones_for_dist/imod-python && python -m build", depends-on=["pull_imod"], description="Build the iMOD Python package." }
+build_xugrid = { cmd="cd ../clones_for_dist/xugrid && python -m build", depends-on=["pull_xugrid"], description="Build the xugrid Python package." }
+build_coupler = { cmd="cd ../clones_for_dist/imod_coupler && python -m build", depends-on=["pull_coupler"], description="Build the imod_coupler Python package." }
+build_primod = { cmd="cd ../clones_for_dist/imod_coupler/pre-processing && python -m build", depends-on=["pull_coupler"], description="Build the primod Python package." }
+build_for_pack = { depends-on=["build_imod", "build_xugrid", "build_primod", "build_coupler"]}
+pack = { cmd="pixi-pack --create-executable --environment build --inject ../clones_for_dist/imod-python/dist/imod-1.0.1.dev1-py3-none-any.whl, ../clones_for_dist/xugrid/dist/xugrid-0.15.2-py3-none-any.whl, ../clones_for_dist/imod_coupler/dist/imod_coupler-2024.3.0-py3-none-any.whl, ../clones_for_dist/imod_coupler/pre-processing/dist/primod-2024.3.0-py3-none-any.whl pixi.toml", depends-on=["build_for_pack"], description="Create an executable package for distribution using pixi-pack, injecting the built wheel files for imod-python, xugrid, imod_coupler, and primod." }
 
 [environments]
-default = { features = ["github"], solve-group = "conda-deps" }
-build ={ features = ["build"], solve-group = "build-deps" }
-profile = { features = ["github", "profile"], solve-group = "conda-deps" }
+default = { features=["github"], solve-group="conda-deps" }
+build = { features=["build"], solve-group="build-deps" }
+profile = { features=["github", "profile"], solve-group="conda-deps" }

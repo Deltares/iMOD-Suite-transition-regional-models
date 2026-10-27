@@ -1,43 +1,19 @@
 # %%
-import argparse
-import logging
-import shutil
-import sys
 from pathlib import Path
 
 import imod
 import pandas as pd
 import xarray as xr
 from imod.formats.prj.prj import open_projectfile_data
-from imod.logging.config import LoggerType
-from imod.logging.loglevel import LogLevel
-from imod.logging.pythonlogger import _formatter
 from imod.mf6.ims import Solution
 from imod.mf6.oc import OutputControl
 from imod.mf6.simulation import Modflow6Simulation
 from primod import MetaMod, MetaModDriverCoupling
 
-from clipping import clip_wel_packages_to_domain
-from settings import ConvertSettings, read_convert_settings
-
-# Loggers in python are singletons, so this is the same instance as the one used in imod.logging.pythonlogger.PythonLogger.
-imod_logger = logging.getLogger("imod")
-
-def create_target_grid(
-        window: tuple[float, float, float, float] | None, 
-        cellsize: float | None
-    ) -> xr.DataArray | None:
-    """
-    Create target grid for MODFLOW 6 simulation based on provided window and cellsize.
-    """
-    if window is None and cellsize is None:
-        return None
-
-    imod_logger.info(f"Creating target grid with window: {window} and cellsize: {cellsize}")
-    xmin, ymin, xmax, ymax = window
-    return imod.util.empty_2d(
-        dx=cellsize, xmin=xmin, xmax=xmax, dy=-cellsize, ymin=ymin, ymax=ymax
-    )
+from src.clipping import clip_wel_packages_to_domain
+from src.grid_helpers import create_target_grid
+from src.log import imod_logger
+from src.settings import ConvertSettings
 
 
 def convert_imod5_to_mf6_sim(
@@ -224,92 +200,46 @@ def make_simulation(
     )
 
 
-def init_logging() -> None:
-    """Initialize logging with stream handler."""
-    imod.logging.configure(
-        LoggerType.PYTHON,
-        log_level=LogLevel.DEBUG,
-        add_default_file_handler=False,
-        add_default_stream_handler=False,
+def convert_model(settings: ConvertSettings):
+    # Generate list of times for simulation
+    times = settings.simulation_times()
+    # Create target grid
+    if settings.bbox is None and settings.cellsize is None:
+        target_grid = None
+    else:
+        target_grid = create_target_grid(like=None, window=settings.bbox, cellsize=settings.cellsize)
+    
+    # Read iMOD5 project file data
+    imod5_data, period_data = open_projectfile_data(settings.prjfile_path)
+    has_msw = "cap" in imod5_data
+    if has_msw:
+        settings.validate_msw()
+
+    # Create coupling object
+    simulation = make_simulation(
+        imod5_data,
+        period_data,
+        settings.is_steady_state,
+        settings.msw_dbase,
+        times,
+        target_grid=target_grid,
+        model_name=settings.model_name,
     )
-    # Add streamhandler
-    streamhandler = logging.StreamHandler(sys.stdout)
-    streamhandler.setLevel(logging.INFO)
-    streamhandler.setFormatter(_formatter())
-    imod_logger.addHandler(streamhandler)
-    imod_logger.info("Logging initialized.")
-
-def _add_filehandler(logfile_path: Path, log_level: int = logging.INFO):
-    """Add a file handler with the specified log level to the logger."""
-    filehandler = logging.FileHandler(logfile_path, mode="w")
-    filehandler.setLevel(log_level)
-    filehandler.setFormatter(_formatter())
-    imod_logger.addHandler(filehandler)
-    imod_logger.info(f"More verbose logging output will be written to {logfile_path}")
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Convert iMOD5 project to MODFLOW 6 and MetaSwap simulation")
-    parser.add_argument("inifile", type=Path, help="Path to the ini file with settings")
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-    init_logging()
-    try:
-        # Read settings from ini file
-        settings: ConvertSettings = read_convert_settings(args.inifile)
-        
-        # Remove existing output directory if overwrite is enabled
-        if settings.overwrite and settings.out_dir.is_dir():
-            shutil.rmtree(settings.out_dir, ignore_errors=True)
+    if isinstance(simulation, Modflow6Simulation):
+        write_kwargs = {"binary": False}
+        # Modify out_dir to point to a modflow6 subdirectory
+        # so that it is consistent to what primod writes.
+        settings.out_dir = settings.out_dir / "modflow6"
         settings.out_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        write_kwargs = {
+            "modflow6_dll": settings.bin_dir / "modflow6" / "libmf6.dll",
+            "metaswap_dll": settings.bin_dir / "metaswap" / "MetaSWAP.dll",
+            "metaswap_dll_dependency": settings.bin_dir / "metaswap",
+            "modflow6_write_kwargs": {"binary": False},
+        }
+    # Write coupling to disk
+    simulation.write(settings.out_dir, **write_kwargs)
+    # Run coupled simulation
+    # simulation.run()
 
-        # Add file handler for logging to a file in the output directory
-        logfile_path = settings.out_dir / "conversion_log.txt"
-        _add_filehandler(logfile_path, settings.log_level)
-
-        # Generate list of times for simulation
-        times = settings.simulation_times()
-        # Create target grid
-        target_grid = create_target_grid(settings.bbox, settings.cellsize)
-        # Read iMOD5 project file data
-        imod5_data, period_data = open_projectfile_data(settings.prjfile_path)
-        has_msw = "cap" in imod5_data
-        if has_msw:
-            settings.validate_msw()
-
-        # Create coupling object
-        simulation = make_simulation(
-            imod5_data,
-            period_data,
-            settings.is_steady_state,
-            settings.msw_dbase,
-            times,
-            target_grid=target_grid,
-            model_name=settings.model_name
-        )
-        if isinstance(simulation, Modflow6Simulation):
-            write_kwargs = {"binary": False}
-            # Modify out_dir to point to a modflow6 subdirectory
-            # so that it is consistent to what primod writes.
-            settings.out_dir = settings.out_dir / "modflow6"
-            settings.out_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            write_kwargs = {
-                "modflow6_dll": settings.bin_dir/"modflow6"/"libmf6.dll",
-                "metaswap_dll": settings.bin_dir/"metaswap"/"MetaSWAP.dll",
-                "metaswap_dll_dependency": settings.bin_dir/"metaswap",
-                "modflow6_write_kwargs": {"binary": False},
-            }
-        # Write coupling to disk
-        simulation.write(settings.out_dir, **write_kwargs)
-        # Run coupled simulation
-        # simulation.run()
-    except Exception:
-        imod_logger.exception("An error occurred during the conversion process.") # this includes traceback in the logs
-        raise
-
-if __name__ == "__main__":
-    main()

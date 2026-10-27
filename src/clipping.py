@@ -11,7 +11,7 @@ from imod.mf6.model import Modflow6Model
 from imod.mf6.wel import Well
 from imod.util.spatial import spatial_reference
 
-from logging_helpers import imod_logger
+from src.log import imod_logger
 
 
 def domain_bounds(domain) -> tuple[float, float, float, float]:

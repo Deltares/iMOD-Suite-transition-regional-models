@@ -1,6 +1,5 @@
 # %%
 """GENPUZZLE script for connecting loose line segments in a GEN file into continuous segments."""
-import argparse
 from collections import defaultdict
 from pathlib import Path
 
@@ -10,8 +9,7 @@ import numpy as np
 import shapely
 import xugrid as xu
 
-from logging_helpers import imod_logger, init_logging
-from settings import read_genpuzzle_settings
+from src.log import imod_logger
 
 DEFAULT_TOLERANCE = 0.001
 
@@ -218,27 +216,3 @@ def genpuzzle(
     imod.formats.gen.write(genfile_out, gdf_out)
     return gdf_out
 
-
-def parse_args():
-    """Parse command-line arguments for the GENPUZZLE script."""
-    parser = argparse.ArgumentParser(
-        description="Connect loose line segments in a GEN file into continuous segments"
-    )
-    parser.add_argument("inifile", type=Path, help="Path to the ini file with settings")
-    return parser.parse_args()
-
-
-def main():
-    """Main function for the GENPUZZLE script."""
-    args = parse_args()
-    init_logging()
-    try:
-        settings = read_genpuzzle_settings(args.inifile)
-        genpuzzle(settings.genfile_in, settings.genfile_out, settings.tolerance)
-    except Exception:
-        imod_logger.exception("An error occurred during the GENPUZZLE process.")
-        raise
-
-
-if __name__ == "__main__":
-    main()

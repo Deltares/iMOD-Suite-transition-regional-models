@@ -1,5 +1,4 @@
-"""Helper functions for initializing and configuring logging for the iMOD Suite."""
-
+# %%
 import logging
 import sys
 from pathlib import Path
@@ -12,20 +11,22 @@ from imod.logging.pythonlogger import _formatter
 # Loggers in python are singletons, so this is the same instance as the one used in imod.logging.pythonlogger.PythonLogger.
 imod_logger = logging.getLogger("imod")
 
-
 def init_logging() -> None:
-    """Initialize logging with one console handler, preserving file handlers."""
+    """Initialize logging with stream handler."""
     imod.logging.configure(
         LoggerType.PYTHON,
         log_level=LogLevel.DEBUG,
         add_default_file_handler=False,
         add_default_stream_handler=False,
     )
-    # FileHandler also inherits from StreamHandler; keep file logging intact.
-    for handler in imod_logger.handlers[:]:
-        if type(handler) is logging.StreamHandler:
-            imod_logger.removeHandler(handler)
-            handler.close()
+    
+    # Remove existing stream handlers to avoid duplicate logs
+    if imod_logger.hasHandlers():
+        for handler in imod_logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                imod_logger.removeHandler(handler)
+    
+    # Add streamhandler
     streamhandler = logging.StreamHandler(sys.stdout)
     streamhandler.setLevel(logging.INFO)
     streamhandler.setFormatter(_formatter())
