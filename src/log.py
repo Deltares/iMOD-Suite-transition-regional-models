@@ -19,6 +19,13 @@ def init_logging() -> None:
         add_default_file_handler=False,
         add_default_stream_handler=False,
     )
+    
+    # Remove existing stream handlers to avoid duplicate logs
+    if imod_logger.hasHandlers():
+        for handler in imod_logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                imod_logger.removeHandler(handler)
+    
     # Add streamhandler
     streamhandler = logging.StreamHandler(sys.stdout)
     streamhandler.setLevel(logging.INFO)

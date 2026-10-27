@@ -40,7 +40,7 @@ import shapely
 import xarray as xr
 import xugrid as xu
 from imod.common.utilities.clip import clip_line_gdf_by_bounding_polygon
-from imod.formats.gen import read, write
+from imod.formats import gen
 from imod.typing import GeoDataFrameType
 from imod.typing.grid import as_ugrid_dataarray
 from imod.util.spatial import spatial_reference
@@ -313,7 +313,7 @@ def snap_gen_file_to_grid(
     if destination.exists() and not overwrite:
         raise FileExistsError(f"Output GEN file already exists: {destination}")
     snapped = snap_gen_to_grid(
-        read(genfile_in),
+        gen.read(genfile_in),
         like=like,
         window=window,
         cellsize=cellsize,
@@ -322,4 +322,4 @@ def snap_gen_file_to_grid(
     if snapped.empty:
         raise ValueError("No line features could be snapped to grid edges.")
     feature_type = "feature_type" if "feature_type" in snapped.columns else None
-    write(destination, snapped.explode(ignore_index=True), feature_type=feature_type)
+    gen.write(destination, snapped.explode(ignore_index=True), feature_type=feature_type)
