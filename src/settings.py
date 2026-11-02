@@ -313,6 +313,71 @@ class GenPuzzleSettings(GenBaseSettings):
         return self
 
 
+class MkWellIpfSettings(BaseModel):
+    """
+    Settings for the MKWELLIPF function: spread the pumping rate of wells over the model layers,
+    following the MKWELLIPF function in iMOD5. Column numbers start at 1, as in iMOD5. Layers
+    must touch, as in MODFLOW 6: the top of a layer is the bottom of the layer above it.
+
+    - Without `top_files` and `bottom_files` only the rate of each well is determined
+      (imod_mkipf_wells.ipf). With them the rate is split over the layers and
+      imod_mkipf_wells_all.ipf, _unassigned.ipf and one file per layer with wells (_l1.ipf, ...)
+      are written.
+    - `khv_files` or `kd_files` (not both) give the horizontal conductivity or the transmissivity
+      of each layer, as files or constants. Without them layers are weighed by screen length.
+    - `iss`: whether the rate is a time average over a specific period.
+      `iss=0` (default): the rate of a well is the average of its .txt time series as a whole,
+      or the value in column `q_col` if the IPF has no .txt files. That column is replaced by
+      the assigned rate.
+      `iss=1`: the rate is the time average of the .txt series over the period `sdate` to
+      `edate`, so both are required, and so are .txt files. The column with their names is
+      replaced by the assigned rate, and Q_ORG holds the names.
+    - `minkht`: layers with K * thickness below this get no rate (needs K).
+    - `minkd`: a well without screen goes to the first layer with a transmissivity above this
+      (needs `kd_files`).
+    - `fnodata`: the value in `top_col`/`bottom_col` for an unknown screen depth. `hnodata`: the
+      rate written for a layer without rate.
+    - `overwrite`: allow overwriting existing result files.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    ipf_files: list[FilePath]
+    top_files: list[FilePath] | None = None
+    bottom_files: list[FilePath] | None = None
+    khv_files: list[FilePath | float] | None = None
+    kd_files: list[FilePath | float] | None = None
+    iss: Literal[0, 1] = 0
+    sdate: date | None = None
+    edate: date | None = None
+    x_col: int = Field(1, ge=1, alias="ixcol")
+    y_col: int = Field(2, ge=1, alias="iycol")
+    q_col: int = Field(1, ge=1, alias="iqcol")
+    top_col: int = Field(4, ge=1, alias="itcol")
+    bottom_col: int = Field(5, ge=1, alias="ibcol")
+    minkht: float = Field(0.0, ge=0)
+    minkd: float = Field(0.0, ge=0)
+    fnodata: float = -99999.0
+    hnodata: float = 0.0
+    overwrite: bool = False
+
+    @model_validator(mode="after")
+    def _check_consistency(self) -> "MkWellIpfSettings":
+        nlayer = len(self.top_files or [])
+        if len(self.bottom_files or []) != nlayer:
+            raise ValueError("TOPIDF and BOTIDF must be given for the same number of layers.")
+        k_files = [files for files in (self.khv_files, self.kd_files) if files is not None]
+        if len(k_files) > 1:
+            raise ValueError("Give either KHVIDF or KDVIDF files, not both.")
+        if k_files and len(k_files[0]) != nlayer:
+            raise ValueError("KHVIDF or KDVIDF must be given for every layer of TOPIDF and BOTIDF.")
+        if self.iss == 1 and (self.sdate is None or self.edate is None):
+            raise ValueError("SDATE and EDATE are required when ISS=1.")
+        if self.sdate and self.edate and self.edate < self.sdate:
+            raise ValueError("EDATE must not be before SDATE.")
+        return self
+
+
 def _read_ini[T: BaseModel](model: type[T], inifile: Path | str) -> T:
     imod_logger.info(f"Reading settings from {inifile}")
     inifile = Path(inifile)
