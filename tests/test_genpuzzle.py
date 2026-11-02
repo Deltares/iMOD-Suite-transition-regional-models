@@ -13,7 +13,6 @@ from src.genpuzzle import genpuzzle
 DATA_DIR = Path(__file__).parent / "data"
 GENFILE_IN = DATA_DIR / "genpuzzle_test.gen"
 IMOD5_OUT = DATA_DIR / "out_imod5.gen"
-FIGURE_OUT = DATA_DIR / "genpuzzle_comparison.png"
 
 
 def _sorted_coordinates(gdf: gpd.GeoDataFrame) -> list[tuple]:
@@ -81,7 +80,7 @@ PLOT_TEST_CASES = [
 
 
 def test_plot_comparison(
-    genpuzzle_out: gpd.GeoDataFrame, imod5_out: gpd.GeoDataFrame
+    genpuzzle_out: gpd.GeoDataFrame, imod5_out: gpd.GeoDataFrame, tmp_path: Path
 ) -> None:
     """Plot a comparison of the input, genpuzzle output, and iMOD5 output."""
     panels = [
@@ -107,5 +106,6 @@ def test_plot_comparison(
     axes[0].set_ylim(-15, 110)
 
     fig.tight_layout(pad=0.5, w_pad=0.5)
-    fig.savefig(FIGURE_OUT, dpi=150, bbox_inches="tight")
-    assert FIGURE_OUT.exists()
+    figure_out = tmp_path / "genpuzzle_comparison.png"
+    fig.savefig(figure_out, dpi=150, bbox_inches="tight")
+    assert figure_out.exists()
