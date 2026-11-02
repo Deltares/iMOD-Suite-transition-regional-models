@@ -53,6 +53,9 @@ def _gensnaptogrid(ini_file: Path):
         cellsize=settings.cellsize,
         max_snap_distance=settings.max_snap_distance,
         overwrite=settings.overwrite,
+        # Only given with I3D=1, which selects the 3D output.
+        idf_top=settings.idf_top,
+        idf_bot=settings.idf_bot,
     )
 
 def _genpuzzle(ini_file: Path):

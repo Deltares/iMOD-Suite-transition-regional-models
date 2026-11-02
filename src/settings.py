@@ -2,10 +2,11 @@ import configparser
 import logging
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import pandas as pd
 from pydantic import (
+    AliasChoices,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -16,6 +17,11 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from src.grid_helpers import open_idf_grid
+
+if TYPE_CHECKING:
+    import xarray as xr
 
 imod_logger = logging.getLogger("imod")
 
@@ -235,9 +241,36 @@ class GenSnapToGridSettings(GenBaseSettings):
 
     idffile: FilePath | None = Field(None, alias="idffile")
     bbox: tuple[float, float, float, float] | None = Field(None, alias="window")
-    cellsize: float | None = Field(None, gt=0, alias="cellsize")
-    max_snap_distance: float | None = Field(None, gt=0, alias="max_snap_distance")
+    cellsize: float | None = Field(
+        None, gt=0, validation_alias=AliasChoices("cellsize", "cell_size")
+    )
+    max_snap_distance: float = Field(0.0, ge=0, alias="max_snap_distance")
     i3d: int = Field(0, alias="i3d")
+    idf_top: FilePath | None = Field(None, alias="idf_top")
+    idf_bot: FilePath | None = Field(None, alias="idf_bot")
+
+    @field_validator("idffile", "idf_top", "idf_bot", mode="before")
+    @classmethod
+    def _resolve_idf_paths(cls, v: Any, info: ValidationInfo) -> Any:
+        """Resolve relative paths against context["base_dir"], if given."""
+        return _resolve_against_base_dir(v, info)
+
+    @property
+    def window(self) -> tuple[float, float, float, float] | None:
+        """The ``WINDOW`` as passed to the snapping functions."""
+        return self.bbox
+
+    @property
+    def like(self) -> "xr.DataArray | None":
+        """
+        The grid of ``IDFFILE``, to snap to, or None if it is not given or if
+        ``WINDOW`` is given: iMOD5 then builds the grid from ``WINDOW`` and the
+        cell size and never reads ``IDFFILE``.
+        """
+        if self.idffile is None or self.bbox is not None:
+            return None
+
+        return open_idf_grid(self.idffile)
 
     @field_validator("function", mode="before")
     @classmethod
@@ -254,30 +287,45 @@ class GenSnapToGridSettings(GenBaseSettings):
     @field_validator("i3d", mode="before")
     @classmethod
     def _check_i3d(cls, v: Any) -> int:
-        i3d = int(v)
-        if i3d == 1:
-            raise ValueError(
-                "I3D=1 (3D GEN output) is not supported yet, only I3D=0 (2D GEN)."
-            )
-        if i3d != 0:
-            raise ValueError(f"I3D must be 0. Got: {v!r}")
+        try:
+            i3d = int(v)
+        except (TypeError, ValueError):
+            raise ValueError(f"I3D must be 0 or 1. Got: {v!r}") from None
+        if i3d not in (0, 1):
+            raise ValueError(f"I3D must be 0 or 1. Got: {v!r}")
         return i3d
 
     @model_validator(mode="after")
     def _check_consistency(self) -> "GenSnapToGridSettings":
-        if self.idffile is None:
-            if self.bbox is None or self.cellsize is None:
-                raise ValueError(
-                    "Provide either IDFFILE, or both WINDOW and CELLSIZE, "
-                    "to define the grid to snap to."
-                )
-        elif self.cellsize is not None:
-            raise ValueError(
-                "CELLSIZE cannot be combined with IDFFILE: the cell size of the "
-                "IDF defines the grid. Use WINDOW to reduce its extent."
-            )
+        if self.i3d == 1:
+            if self.idf_top is None or self.idf_bot is None:
+                raise ValueError("IDF_TOP and IDF_BOT are required with I3D=1.")
+        else:
+            for keyword, value in (("IDF_TOP", self.idf_top), ("IDF_BOT", self.idf_bot)):
+                if value is not None:
+                    raise ValueError(f"{keyword} can only be used with I3D=1.")
         if self.bbox is not None:
             _check_window_bounds(self.bbox)
+            if self.cellsize is None:
+                raise ValueError(
+                    "WINDOW requires CELLSIZE (or CELL_SIZE): iMOD5 builds the "
+                    "grid from the window and a cell size."
+                )
+            if self.idffile is not None:
+                imod_logger.warning(
+                    "IDFFILE is not used to define the grid because WINDOW is "
+                    "given, as in iMOD5: the grid follows from WINDOW and CELLSIZE."
+                )
+        elif self.idffile is None:
+            raise ValueError(
+                "Provide either IDFFILE, or both WINDOW and CELLSIZE, "
+                "to define the grid to snap to."
+            )
+        elif self.cellsize is not None:
+            raise ValueError(
+                "CELLSIZE cannot be combined with IDFFILE without WINDOW: the "
+                "cell size of the IDF defines the grid."
+            )
         if self.genfile_out.exists() and not self.overwrite:
             raise ValueError(
                 f"Output GEN file already exists: {self.genfile_out}, "
