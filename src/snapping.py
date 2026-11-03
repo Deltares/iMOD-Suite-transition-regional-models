@@ -2,20 +2,17 @@
 
 #### How lines are snapped
 
-The algorithm is a port of the one in iMOD5 5.6.1 (``IMODBATCH_GENSNAPTOGRID``),
-in ``src/imod5_snap.py``; see that module for the Fortran routines it follows. In
-short:
+Edge selection uses the public xugrid snapping API, adapted in
+``src/grid_snapping.py``. Differences from iMOD5 5.6.1 are accepted and
+illustrated in ``docs/grid_snapping/known_differences.md``:
 
-- Every segment of a line is cut at the grid lines and at the lines through the
-  cell centres. Each piece is attributed to the corner node of the cell holding
-  its midpoint that is nearest to that midpoint. Consecutive pieces of a feature
-  are connected by walls along the grid between their nodes. Vertices are not
-  moved.
-- After the last piece of the file, that piece is connected to its own
-  predecessor's node, which also snaps the edge of the cell holding the end of
-  the last line that reaches the grid.
-- Pieces outside the grid are dropped and the pieces on both sides of the gap
-  are connected, exactly as iMOD5 does. Nothing is clipped.
+- xugrid selects edges through intersected line segments and neighbouring cell
+  centres. Vertices are not moved by default, and features are independent of
+  file order. The legacy final-feature extension is not reproduced.
+- Outside segments do not receive the legacy corner-pairing treatment.
+- Otherwise-empty straight axis-aligned lines exactly through cell centres are
+  retried on the nearest parallel interior grid line, choosing west/south on
+  ties. Short lines can still produce no edges.
 - Only edges between two cells are selected: edges on the boundary of the grid
   are never snapped to. A line along the boundary, a line shorter than a cell, or
   a line outside the grid gives no output. If no line is snapped at all, no
@@ -23,13 +20,12 @@ short:
 - Polygons are snapped as their exterior ring, as iMOD5 treats rings as lines.
 - GEN files do not store a coordinate system, so the lines and the grid must use
   the same one.
-- Grids with equal cells along each axis use ``INTERSECT_EQUI``; for grids with
-  cells of different sizes iMOD5 uses ``INTERSECT_NONEQUI``, which is ported too.
+- Equidistant and nonuniform structured grids use the same xugrid algorithm.
 
 #### 3D walls (``I3D=1``)
 
 With ``top`` and ``bottom`` grids every snapped edge becomes a vertical wall: a
-closed polygon with Z values. See :func:`src.imod5_snap.vertical_walls` for the
+closed polygon with Z values. See :func:`src.grid_snapping.vertical_walls` for the
 rules, which were established by comparing with iMOD5 5.6.1. iMOD5 averages TOP
 and BOT grids with smaller cells onto the target grid. That is not supported
 here: TOP and BOT must be on the same grid as the target grid, or on a larger
@@ -56,7 +52,7 @@ from src.grid_helpers import (
     x_nodes,
     y_nodes,
 )
-from src.imod5_snap import (
+from src.grid_snapping import (
     snap_lines_to_edges,
     unique_walls,
     vertical_walls,
@@ -147,8 +143,8 @@ def snap_gen_to_grid(
     """
     Snap line features to the cell edges of a structured grid.
 
-    The edge selection is a port of iMOD5's GENSNAPTOGRID, including the way it
-    breaks ties and treats the end of the last line; see the module docstring.
+    Edge selection uses xugrid, with a parallel-grid-line retry for otherwise
+    empty straight cell-centre lines; see the module docstring.
 
     Without ``top`` and ``bottom`` features are never merged across input rows.
     Features producing no edges are omitted. Disconnected snapped parts are
@@ -179,7 +175,7 @@ def snap_gen_to_grid(
         Maximum distance in coordinate units for moving input vertices onto
         nearby grid nodes before snapping, not a line-to-edge cutoff. iMOD5 does
         not move vertices, so the default of zero does not move any vertex and
-        reproduces iMOD5. Larger values change which edges are selected.
+        avoids vertex pre-snapping. Larger values change which edges are selected.
     top, bottom : xarray.DataArray, optional
         ``IDF_TOP`` and ``IDF_BOT``: two-dimensional grids with ``x`` and ``y``
         coordinates that give the top and bottom of the walls. Either both or

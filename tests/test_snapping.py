@@ -1,6 +1,6 @@
 """
-Unit tests of snapping: the grid helpers, the port of the iMOD5 algorithm and the
-public functions. Equality with iMOD5 itself is tested in
+Unit tests of snapping: the grid helpers, wall assembly and the public functions.
+Accepted differences from iMOD5 itself are tested in
 ``test_snapping_imod5.py``.
 """
 
@@ -20,9 +20,8 @@ from imod.util import empty_2d
 
 from src.cli import _gensnaptogrid
 from src.grid_helpers import GridSpec, create_target_grid, grid_spec, open_idf_grid
-from src.imod5_snap import (
+from src.grid_snapping import (
     raster_order,
-    snap_lines_imod5,
     snap_lines_to_edges,
     unique_walls,
     vertical_walls,
@@ -147,13 +146,12 @@ def test_grid_spec_of_an_idf_reads_the_header_as_imod5_does(tmp_path):
     assert grid_spec(grid).ymax == 462821.75
 
 
-# The iMOD5 port. Walls are (kind, irow, icol): kind 0 is the vertical wall on the
+# Walls are (kind, irow, icol): kind 0 is the vertical wall on the
 # east edge of cell (irow, icol), kind 1 the horizontal wall on its south edge.
 
 GRID = GridSpec(0.0, 4.0, 1.0, 1.0, 4, 4)
 
-
-def _walls(lines, grid=GRID, snap=snap_lines_imod5) -> set[tuple[int, int, int]]:
+def _walls(lines, grid=GRID, snap=snap_lines_to_edges) -> set[tuple[int, int, int]]:
     result = snap([np.asarray(line, dtype=float) for line in lines], grid)
     return set(zip(result["kind"], result["irow"], result["icol"]))
 
@@ -165,34 +163,31 @@ def _walls(lines, grid=GRID, snap=snap_lines_imod5) -> set[tuple[int, int, int]]
         ([[(1.1, 0.1), (1.1, 3.9)]], {(0, r, 0) for r in range(4)}),
         (
             [[(0.6, 1.4), (2.6, 1.4), (2.6, 3.4)]],
-            {(1, 2, 1), (1, 2, 2), (0, 0, 2), (0, 1, 2), (0, 2, 2)},
+            {(1, 2, 1), (1, 2, 2), (0, 1, 2), (0, 2, 2)},
         ),
-        ([[(1.5, 1.5), (2.5, 2.5)]], {(0, 1, 1)}),
-        # The cell with the end of the last feature is snapped too.
-        ([[(1.1, 0.1), (1.1, 2.3)]], {(0, 1, 0), (0, 2, 0), (0, 3, 0)}),
+        ([[(1.5, 1.5), (2.5, 2.5)]], {(0, 1, 1), (0, 2, 0), (1, 1, 1), (1, 0, 2)}),
+        ([[(1.1, 0.1), (1.1, 2.3)]], {(0, 2, 0), (0, 3, 0)}),
         ([[(10.0, 10.0), (12.0, 12.0)]], set()),
         ([[(2.0, 2.0)]], set()),
         ([[]], set()),
         ([[(1.1, 1.1), (1.1, 1.1), (2.9, 2.9)]], {(0, 1, 1), (0, 2, 0), (1, 0, 2), (1, 1, 1)}),
     ],
 )
-def test_snap_lines_imod5_walls(lines, expected):
-    # Expected walls are what iMOD5 5.6.1 wrote for these lines.
+def test_snap_lines_to_edges_walls(lines, expected):
     assert _walls(lines) == expected
 
 
-def test_snap_lines_imod5_pairs_only_pieces_of_the_same_feature():
-    # Only the last piece of the file is paired with its predecessor's node.
-    result = snap_lines_imod5(
+def test_snap_lines_to_edges_preserves_feature_positions():
+    result = snap_lines_to_edges(
         [np.array([(1.1, 0.1), (1.1, 2.3)]), np.array([(2.1, 0.1), (2.1, 3.9)])], GRID
     )
     first = result[result["position"] == 0]
     assert set(zip(first["kind"], first["irow"], first["icol"])) == {(0, 2, 0), (0, 3, 0)}
     assert list(result.columns) == ["position", "kind", "irow", "icol"]
-    assert snap_lines_imod5([], GRID).empty
+    assert snap_lines_to_edges([], GRID).empty
 
 
-def test_snap_lines_imod5_on_a_nonuniform_grid():
+def test_snap_lines_to_edges_on_a_nonuniform_grid():
     nonuniform = GridSpec(
         0.0,
         4.0,
@@ -412,19 +407,19 @@ def test_snap_gen_to_grid_ignores_z_and_snaps_the_ring_of_a_polygon(like):
     assert_geodataframe_equal(snap_gen_to_grid(polygon, like=like), expected)
 
 
-def test_snap_gen_to_grid_extends_only_the_end_of_the_last_feature(like):
+def test_snap_gen_to_grid_does_not_extend_the_last_feature(like):
     def length(*lines):
         gdf = gpd.GeoDataFrame(geometry=[shapely.LineString(line) for line in lines])
         return snap_gen_to_grid(gdf, like=like).geometry.length.sum()
 
-    assert length([(1.1, 0.1), (1.1, 2.3)]) == 3.0
+    assert length([(1.1, 0.1), (1.1, 2.3)]) == 2.0
     assert length([(1.1, 2.3), (1.1, 0.1)]) == 2.0
     assert length([(1.1, 0.1), (1.1, 2.3)], [(2.1, 0.1), (2.1, 3.9)]) == 3.0 + 4.0 - 1.0
 
 
-def test_snap_gen_to_grid_breaks_a_tie_diagonal_with_one_edge(like):
+def test_snap_gen_to_grid_uses_xugrid_diagonal_tie_selection(like):
     original = gpd.GeoDataFrame(geometry=[shapely.LineString([(1.5, 1.5), (2.5, 2.5)])])
-    assert snap_gen_to_grid(original, like=like).geometry.iloc[0].length == 1.0
+    assert snap_gen_to_grid(original, like=like).geometry.iloc[0].length == 4.0
 
 
 def test_snap_gen_to_grid_max_snap_distance_moves_vertices_onto_nodes(like):
@@ -499,13 +494,20 @@ def test_walls_have_the_ring_order_and_direction_of_imod5(like):
 
     # In raster order: the walls of cell (1, 2) before those of cell (2, 2).
     assert _rings(_snap3d([CORNER], top, like=like)) == [
-        _wall((3, 4), (3, 3), 1033, 523),
         _wall((3, 3), (3, 2), 1032, 522),
         _wall((1, 1), (2, 1), 1011, 510),
         _wall((3, 2), (3, 1), 1031, 521),
         _wall((2, 1), (3, 1), 1021, 520),
     ]
     assert _wall((1, 4), (1, 3), 1013, 503) in _rings(_snap3d([VERTICAL], top, like=like))
+
+
+def test_centre_line_3d_has_parallel_walls_with_adjacent_cell_values(like):
+    centre = shapely.LineString([(0.5, 0), (0.5, 4)])
+    assert _rings(_snap3d([centre], _coded(like), like=like)) == [
+        _wall((1, y + 1), (1, y), 1010 + y, 500 + y)
+        for y in range(3, -1, -1)
+    ]
 
 
 def test_walls_take_the_highest_top_and_lowest_bottom_of_the_two_cells(like):
