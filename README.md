@@ -106,11 +106,18 @@ pixi run <task name> <path of your ini file>
 ### GENSNAPTOGRID
 
 Rasterizes the lines in a GEN file onto the cell edges of a grid, so you can see
-how the lines will be applied in a model for a given cell size. This is a port of
-the iMOD5 function `GENSNAPTOGRID` (iMOD5 user manual, section 8.4.1): for the
-same input the same cell edges are selected as in iMOD5 5.6.1, lines through
-cell centres and other ties included (see `tests/test_snapping_imod5.py`). With
-`I3D=1` every edge becomes a vertical wall with a top and a bottom.
+how the lines will be applied in a model for a given cell size. Edge selection
+uses xugrid's public snapping API rather than a custom port of iMOD5
+`GENSNAPTOGRID` (iMOD5 user manual, section 8.4.1). Exact iMOD5 reproduction is
+not promised: slight endpoint, tie, re-entry and nonuniform-grid differences are
+accepted in exchange for maintainability. With `I3D=1` every edge becomes a
+vertical wall with the existing adjacent-cell TOP/BOT and ring-order rules.
+
+See the compact [xugrid adapter](src/grid_snapping.py) and the reference
+[known differences report](docs/grid_snapping/known_differences.md) or
+[self-contained HTML gallery](docs/grid_snapping/known_differences.html) for the measured
+tradeoffs and the centre-line correction.
+
 
 ```powershell
 pixi run gensnaptogrid snap_gen.ini
