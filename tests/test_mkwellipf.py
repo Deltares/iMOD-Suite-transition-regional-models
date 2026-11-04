@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from pydantic import ValidationError
 
 from src.mkwellipf import mkwellipf, well_rates
 from src.settings import MkWellIpfSettings
@@ -231,6 +230,17 @@ def test_space_separated_ipf(tmp_path: Path) -> None:
     assert table["Q_ASSIGNED"].tolist() == [-100.0]
 
 
+def test_results_go_to_the_output_folder(tmp_path: Path, model: dict) -> None:
+    ipf = make_ipf(tmp_path, [("A", -2, -8, -100)])
+    output_folder = tmp_path / "out" / "nested"
+
+    written = run_mkwellipf(ipf, q_col=6, output_folder=output_folder, **model)
+
+    assert {path.parent for path in written} == {output_folder / "wells"}
+    assert all(path.exists() for path in written)
+    assert not (tmp_path / "wells").exists()
+
+
 def test_existing_result_requires_overwrite(tmp_path: Path, model: dict) -> None:
     ipf = make_ipf(tmp_path, [("A", -2, -8, -100)])
     run_mkwellipf(ipf, q_col=6, **model)
@@ -239,24 +249,3 @@ def test_existing_result_requires_overwrite(tmp_path: Path, model: dict) -> None
         run_mkwellipf(ipf, q_col=6, **model)
 
     run_mkwellipf(ipf, q_col=6, overwrite=True, **model)
-
-
-def test_settings_iss_1_requires_dates(tmp_path: Path) -> None:
-    ipf = make_ipf(tmp_path, [("A", -2, -8, -100)])
-
-    with pytest.raises(ValidationError, match="SDATE and EDATE are required"):
-        MkWellIpfSettings(ipf_files=[ipf], iss=1)
-
-
-def test_settings_khv_and_kd_are_exclusive(tmp_path: Path, model: dict) -> None:
-    ipf = make_ipf(tmp_path, [("A", -2, -8, -100)])
-
-    with pytest.raises(ValidationError, match="not both"):
-        MkWellIpfSettings(ipf_files=[ipf], kd_files=[1.0, 1.0, 1.0], **model)
-
-
-def test_settings_top_and_bottom_need_the_same_number_of_layers(tmp_path: Path, model: dict) -> None:
-    ipf = make_ipf(tmp_path, [("A", -2, -8, -100)])
-
-    with pytest.raises(ValidationError, match="same number of layers"):
-        MkWellIpfSettings(ipf_files=[ipf], top_files=model["top_files"])

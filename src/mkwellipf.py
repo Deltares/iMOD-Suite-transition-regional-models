@@ -154,7 +154,8 @@ def build_results(
 def mkwellipf(settings: MkWellIpfSettings) -> list[Path]:
     """
     Run MKWELLIPF as described by the settings, see `MkWellIpfSettings`. Returns the files
-    written, in a folder named after each IPF (without extension).
+    written, in a folder named after each IPF (without extension), next to the IPF or in
+    `output_folder`.
     """
     sdate, edate = (
         pd.Timestamp(d) if d is not None else None for d in (settings.sdate, settings.edate)
@@ -195,13 +196,16 @@ def mkwellipf(settings: MkWellIpfSettings) -> list[Path]:
         # With ISS=1 the column with the file names is replaced, Q_ORG then holds the names
         replaced_col = assoc_col if settings.iss == 1 else settings.q_col
         tables = build_results(wells, rates, layers, replaced_col, settings.hnodata)
-        folder = ipf_file.with_suffix("")
+        if settings.output_folder is None:
+            folder = ipf_file.with_suffix("")
+        else:
+            folder = settings.output_folder / ipf_file.stem
         paths = [folder / f"{name}.ipf" for name in tables]
         existing = [path for path in paths if path.exists()]
         if existing and not settings.overwrite:
             raise FileExistsError(f"Result file already exists: {existing[0]}, use overwrite.")
 
-        folder.mkdir(exist_ok=True)
+        folder.mkdir(parents=True, exist_ok=True)
         index_col = assoc_col if settings.iss == 0 else wells.shape[1] + 1
         for path, table in zip(paths, tables.values()):
             table = table.round({"Q_ASSIGNED": 3, "FRACTION": 4, "TOP": 2, "BOT": 2, "KD": 5})

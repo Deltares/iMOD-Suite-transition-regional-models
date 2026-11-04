@@ -1,6 +1,6 @@
 import configparser
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -21,6 +21,7 @@ imod_logger = logging.getLogger("imod")
 
 _GENSNAPTOGRID = "GENSNAPTOGRID"
 _GENPUZZLE = "GENPUZZLE"
+_MKWELLIPF = "MKWELLIPF"
 _DEFAULT_TOLERANCE = 0.001
 
 IssMode = Annotated[
@@ -97,6 +98,32 @@ def _parse_log_level(v: Any) -> int:
         return v
     else:
         raise ValueError(msg)  # noqa: TRY004
+
+
+def _numbered_keys(prefix: str, count: int) -> list[str]:
+    """The keys prefix1 to prefixN."""
+    return [f"{prefix}{i}" for i in range(1, count + 1)]
+
+
+def _numbered_values(
+    data: dict[str, Any], prefix: str, count: int, required: bool = True
+) -> list[Any]:
+    """The values of the keys prefix1 to prefixN, in order. Missing keys are skipped unless required."""
+    keys = _numbered_keys(prefix, count)
+    missing = [key for key in keys if key not in data]
+    if required and missing:
+        raise ValueError(
+            f"{missing[0].upper()} is missing, {prefix.upper()}1 to {prefix.upper()}{count} are required."
+        )
+    return [data[key] for key in keys if key in data]
+
+
+def _number_or_path(v: Any, info: ValidationInfo) -> Any:
+    """A constant for a layer, or else the path of a file."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return _resolve_against_base_dir(v, info)
 
 
 class ConvertSettings(BaseModel):
@@ -316,33 +343,15 @@ class GenPuzzleSettings(GenBaseSettings):
 class MkWellIpfSettings(BaseModel):
     """
     Settings for the MKWELLIPF function: spread the pumping rate of wells over the model layers,
-    following the MKWELLIPF function in iMOD5. Column numbers start at 1, as in iMOD5. Layers
-    must touch, as in MODFLOW 6: the top of a layer is the bottom of the layer above it.
-
-    - Without `top_files` and `bottom_files` only the rate of each well is determined
-      (imod_mkipf_wells.ipf). With them the rate is split over the layers and
-      imod_mkipf_wells_all.ipf, _unassigned.ipf and one file per layer with wells (_l1.ipf, ...)
-      are written.
-    - `khv_files` or `kd_files` (not both) give the horizontal conductivity or the transmissivity
-      of each layer, as files or constants. Without them layers are weighed by screen length.
-    - `iss`: whether the rate is a time average over a specific period.
-      `iss=0` (default): the rate of a well is the average of its .txt time series as a whole,
-      or the value in column `q_col` if the IPF has no .txt files. That column is replaced by
-      the assigned rate.
-      `iss=1`: the rate is the time average of the .txt series over the period `sdate` to
-      `edate`, so both are required, and so are .txt files. The column with their names is
-      replaced by the assigned rate, and Q_ORG holds the names.
-    - `minkht`: layers with K * thickness below this get no rate (needs K).
-    - `minkd`: a well without screen goes to the first layer with a transmissivity above this
-      (needs `kd_files`).
-    - `fnodata`: the value in `top_col`/`bottom_col` for an unknown screen depth. `hnodata`: the
-      rate written for a layer without rate.
-    - `overwrite`: allow overwriting existing result files.
+    following the MKWELLIPF function in iMOD5, see the iMOD5 manual for the meaning of the
+    keywords. Column numbers start at 1. Layers must touch, as in MODFLOW 6. In an ini file the
+    files of the layers and the IPFs are given with numbered keys (``TOPIDF1``, ``IPF1``, ...).
     """
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    ipf_files: list[FilePath]
+    function: str = Field(_MKWELLIPF, alias="function")
+    ipf_files: list[FilePath] = Field(min_length=1)
     top_files: list[FilePath] | None = None
     bottom_files: list[FilePath] | None = None
     khv_files: list[FilePath | float] | None = None
@@ -360,6 +369,78 @@ class MkWellIpfSettings(BaseModel):
     fnodata: float = -99999.0
     hnodata: float = 0.0
     overwrite: bool = False
+    output_folder: Path | None = None
+    log_level: int = Field(logging.INFO, alias="loglevel")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _collect_numbered_keys(cls, data: Any, info: ValidationInfo) -> Any:
+        """
+        Make keywords case-insensitive, and collect the numbered keywords of an ini file
+        (TOPIDF1.., IPF1..) into the lists of files.
+        """
+        data = _normalise_mapping(data)
+        if not isinstance(data, dict):
+            return data
+        if int(data.get("imidf", 0)) != 0:
+            raise ValueError("IMIDF is not supported yet, only IMIDF=0.")
+        # The number of IPFs and layers are given as keywords, use these to find the files
+        collected: dict[str, list[Any]] = {}
+        consumed = {"nipf", "nlay", "imidf"}
+        if "ipf_files" not in data:
+            if "nipf" not in data:
+                raise ValueError("NIPF and IPF1 to IPFN are required.")
+            nipf = int(data["nipf"])
+            collected["ipf_files"] = [
+                _resolve_against_base_dir(path, info)
+                for path in _numbered_values(data, "ipf", nipf)
+            ]
+            consumed.update(_numbered_keys("ipf", nipf))
+        nlay = int(data.get("nlay", 0))
+        for key, prefix in (("top_files", "topidf"), ("bottom_files", "botidf")):
+            if nlay > 0:
+                collected[key] = [
+                    _resolve_against_base_dir(path, info)
+                    for path in _numbered_values(data, prefix, nlay)
+                ]
+                consumed.update(_numbered_keys(prefix, nlay))
+        for key, prefix in (("khv_files", "khvidf"), ("kd_files", "kdvidf")):
+            values = _numbered_values(data, prefix, nlay, required=False)
+            if values:
+                collected[key] = [_number_or_path(value, info) for value in values]
+            consumed.update(_numbered_keys(prefix, nlay))
+        return {**{k: v for k, v in data.items() if k not in consumed}, **collected}
+
+    @field_validator("function", mode="before")
+    @classmethod
+    def _check_function(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip().upper() == _MKWELLIPF:
+            return _MKWELLIPF
+        raise ValueError(f"FUNCTION must be {_MKWELLIPF}. Got: {v!r}")
+
+    @field_validator("iss", mode="before")
+    @classmethod
+    def _iss_to_int(cls, v: Any) -> Any:
+        return int(v) if isinstance(v, str) else v
+
+    @field_validator("sdate", "edate", mode="before")
+    @classmethod
+    def _parse_date(cls, v: Any) -> Any:
+        """Dates as in iMOD5 (yyyymmdd) or ISO (yyyy-mm-dd)."""
+        if isinstance(v, (str, int)) and len(str(v).strip()) == 8 and str(v).strip().isdigit():
+            return datetime.strptime(str(v).strip(), "%Y%m%d").date()
+        return v
+
+    @field_validator("output_folder", mode="before")
+    @classmethod
+    def _resolve_output_folder(cls, v: Any, info: ValidationInfo) -> Any:
+        """Resolve a relative path against context["base_dir"], if given."""
+        return _resolve_against_base_dir(v, info)
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _log_level_to_int(cls, v: Any) -> int:
+        return _parse_log_level(v)
 
     @model_validator(mode="after")
     def _check_consistency(self) -> "MkWellIpfSettings":
@@ -368,13 +449,18 @@ class MkWellIpfSettings(BaseModel):
             raise ValueError("TOPIDF and BOTIDF must be given for the same number of layers.")
         k_files = [files for files in (self.khv_files, self.kd_files) if files is not None]
         if len(k_files) > 1:
-            raise ValueError("Give either KHVIDF or KDVIDF files, not both.")
+            raise ValueError(
+                "Give either KHVIDF or KDVIDF files, not both. A mix between layers is not supported."
+            )
         if k_files and len(k_files[0]) != nlayer:
             raise ValueError("KHVIDF or KDVIDF must be given for every layer of TOPIDF and BOTIDF.")
         if self.iss == 1 and (self.sdate is None or self.edate is None):
             raise ValueError("SDATE and EDATE are required when ISS=1.")
         if self.sdate and self.edate and self.edate < self.sdate:
             raise ValueError("EDATE must not be before SDATE.")
+        names = [path.stem.lower() for path in self.ipf_files]
+        if self.output_folder is not None and len(set(names)) != len(names):
+            raise ValueError("The IPF files must have different names when OUTPUT_FOLDER is given.")
         return self
 
 
@@ -400,3 +486,7 @@ def read_gen_snap_to_grid_settings(inifile: Path | str) -> GenSnapToGridSettings
 
 def read_genpuzzle_settings(inifile: Path | str) -> GenPuzzleSettings:
     return _read_ini(GenPuzzleSettings, inifile)
+
+
+def read_mkwellipf_settings(inifile: Path | str) -> MkWellIpfSettings:
+    return _read_ini(MkWellIpfSettings, inifile)
