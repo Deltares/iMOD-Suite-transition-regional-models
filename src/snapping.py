@@ -2,33 +2,34 @@
 
 #### How lines are snapped
 
-The result was compared against iMOD5 5.6.1 on synthetic GEN files:
+Edge selection uses the public xugrid snapping API, adapted in
+``src/grid_snapping.py``. Differences from iMOD5 5.6.1 are accepted and
+illustrated in ``docs/grid_snapping/known_differences.md``:
 
-- A line selects a cell edge when it crosses the straight segment between the
-  centres of the two cells that share that edge. Vertices are not moved.
-- The edge of the cell that contains the last vertex of the last feature is also
-  selected, even if the line stops before the centre of that cell. This is what
-  iMOD5 does. It does not extend the end of any other feature, and only the
-  last feature that reaches the grid counts: a last feature that is entirely
-  outside the grid is ignored, but one that snaps to nothing (for example a
-  line within a single cell) still prevents the extension of the one before it.
-  The first vertex is not extended, so reversing a line changes the result.
+- xugrid selects edges through intersected line segments and neighbouring cell
+  centres. Vertices are not moved by default, and features are independent of
+  file order. The legacy final-feature extension is not reproduced.
+- Outside segments do not receive the legacy corner-pairing treatment.
+- Otherwise-empty straight axis-aligned lines exactly through cell centres are
+  retried on the nearest parallel interior grid line, choosing west/south on
+  ties. Short lines can still produce no edges.
 - Only edges between two cells are selected: edges on the boundary of the grid
   are never snapped to. A line along the boundary, a line shorter than a cell, or
   a line outside the grid gives no output. If no line is snapped at all, no
   output file is written and the function raises an error.
-- Lines are clipped to the grid. Every input feature keeps its own output line
-  and attributes, also if two lines snap to the same edge.
-- If a line leaves and re-enters the grid, the parts are written as separate
-  features with the attributes repeated, as a GEN file has no multi-part lines.
+- Polygons are snapped as their exterior ring, as iMOD5 treats rings as lines.
 - GEN files do not store a coordinate system, so the lines and the grid must use
   the same one.
+- Equidistant and nonuniform structured grids use the same xugrid algorithm.
 
-Known difference: lines that pass exactly through cell centres (for example a
-45 degree line from centre to centre) are ties. iMOD5 resolves these differently
-from this implementation, and the result of this implementation can depend on
-floating point rounding.
+#### 3D walls (``I3D=1``)
 
+With ``top`` and ``bottom`` grids every snapped edge becomes a vertical wall: a
+closed polygon with Z values. See :func:`src.grid_snapping.vertical_walls` for the
+rules, which were established by comparing with iMOD5 5.6.1. iMOD5 averages TOP
+and BOT grids with smaller cells onto the target grid. That is not supported
+here: TOP and BOT must be on the same grid as the target grid, or on a larger
+grid with the same cells.
 """
 
 from pathlib import Path
@@ -38,140 +39,93 @@ import numpy as np
 import pandas as pd
 import shapely
 import xarray as xr
-import xugrid as xu
-from imod.common.utilities.clip import clip_line_gdf_by_bounding_polygon
 from imod.formats import gen
 from imod.typing import GeoDataFrameType
-from imod.typing.grid import as_ugrid_dataarray
-from imod.util.spatial import spatial_reference
-from scipy.spatial import cKDTree
 
-from src.grid_helpers import create_target_grid
-
-
-def _extend_line_end(line: shapely.LineString, grid) -> shapely.LineString:
-    """
-    Extend the last segment of a line to the centre of the cell holding its
-    last vertex, as iMOD5 does: the edge of the end cell is snapped even when
-    the line stops before the centre of that cell. Ends on a cell boundary or
-    outside the grid are left alone.
-    """
-    coordinates = np.asarray(line.coords)[:, :2]
-    end = coordinates[-1]
-    face = grid.locate_points(end[np.newaxis])[0]
-    if face < 0:
-        return line
-    corners = grid.node_coordinates[grid.face_node_connectivity[face]]
-    lower, upper = corners.min(axis=0), corners.max(axis=0)
-    tolerance = 1e-9 * float((upper - lower).min())
-    if ((end - lower) <= tolerance).any() or ((upper - end) <= tolerance).any():
-        return line
-    steps = np.diff(coordinates, axis=0)
-    lengths = np.hypot(steps[:, 0], steps[:, 1])
-    nonzero = np.flatnonzero(lengths > 0.0)
-    if nonzero.size == 0:
-        return line
-    direction = steps[nonzero[-1]] / lengths[nonzero[-1]]
-    reach = float(np.dot(grid.centroids[face] - end, direction))
-    if reach <= 0.0:
-        return line
-    new_end = end + direction * reach * (1.0 + 1e-6)
-    return shapely.LineString(np.vstack([coordinates, new_end]))
+from src.grid_helpers import (
+    GridSpec,
+    cell_values,
+    create_target_grid,
+    grid_spec,
+    open_idf_grid,
+    sample_on_grid,
+    x_nodes,
+    y_nodes,
+)
+from src.grid_snapping import (
+    snap_lines_to_edges,
+    unique_walls,
+    vertical_walls,
+    wall_end_points,
+)
 
 
 def _assert_only_line_geometries(geometry: gpd.GeoSeries) -> None:
-    """Raise if any geometry is missing, empty, or not a LineString."""
+    """Raise if any geometry is missing, empty, or neither a LineString nor a Polygon."""
     if (
         geometry.isna().any()
         or geometry.is_empty.any()
-        or (geometry.geom_type != "LineString").any()
+        or (~geometry.geom_type.isin(["LineString", "Polygon"])).any()
     ):
-        raise ValueError("Input geometries must be non-empty LineStrings.")
+        raise ValueError("Input geometries must be non-empty LineStrings or Polygons.")
 
 
-def _clip_to_grid(original: GeoDataFrameType, target: xr.DataArray) -> gpd.GeoDataFrame:
-    """
-    Clip the lines to the extent of the grid, as 2D lines.
+def _vertices(geometry: gpd.GeoSeries) -> list[np.ndarray]:
+    """The 2D vertices of each line, or of the exterior ring of each polygon."""
+    return [
+        shapely.get_coordinates(
+            geom.exterior if geom.geom_type == "Polygon" else geom
+        )
+        for geom in geometry
+    ]
 
-    Clipping explodes lines into parts. The ``position`` column holds the row of
-    ``original`` each part comes from.
-    """
-    _, xmin, xmax, _, ymin, ymax = spatial_reference(target)
-    mask = gpd.GeoDataFrame(
-        geometry=[shapely.box(xmin, ymin, xmax, ymax)], crs=original.crs
-    )
-    lines_2d = gpd.GeoDataFrame(
-        geometry=shapely.force_2d(original.geometry.to_numpy()), crs=original.crs
-    )
-    clipped = clip_line_gdf_by_bounding_polygon(lines_2d, mask)
-    clipped["position"] = clipped.index.get_level_values(0).to_numpy()
-    return clipped.reset_index(drop=True)
+
+def _nearest_node(nodes: np.ndarray, values: np.ndarray) -> np.ndarray:
+    """The value of ``nodes`` (sorted ascending) closest to each of ``values``."""
+    upper = np.clip(np.searchsorted(nodes, values), 1, len(nodes) - 1)
+    lower = upper - 1
+    use_lower = np.abs(values - nodes[lower]) <= np.abs(nodes[upper] - values)
+    return np.where(use_lower, nodes[lower], nodes[upper])
 
 
 def _snap_vertices_to_nodes(
-    lines: gpd.GeoDataFrame, grid, max_snap_distance: float
-) -> gpd.GeoDataFrame:
+    lines: list[np.ndarray], grid: GridSpec, max_snap_distance: float
+) -> list[np.ndarray]:
     """
-    Move vertices within ``max_snap_distance`` onto the nearest grid node and
-    drop lines that collapse to a point.
-
-    Done before snapping to edges so that collapsed lines never reach xugrid's
-    edge allocator, which cannot handle zero intersected segments.
+    Move vertices within ``max_snap_distance`` onto the nearest grid node, and
+    empty the lines that collapse to a point.
     """
-    coordinates = shapely.get_coordinates(lines.geometry)
-    distances, nodes = cKDTree(grid.node_coordinates).query(coordinates)
-    within_distance = distances <= max_snap_distance
-    coordinates[within_distance] = grid.node_coordinates[nodes[within_distance]]
-    lines = lines.copy()
-    lines.geometry = shapely.set_coordinates(
-        lines.geometry.to_numpy().copy(), coordinates
+    counts = [len(line) for line in lines]
+    coordinates = np.concatenate(lines) if lines else np.empty((0, 2))
+    x_edges = x_nodes(grid)
+    y_edges = y_nodes(grid)
+    nearest = np.column_stack(
+        [
+            _nearest_node(x_edges, coordinates[:, 0]),
+            _nearest_node(y_edges[::-1], coordinates[:, 1]),
+        ]
     )
-    return lines.loc[lines.geometry.length > 0.0].reset_index(drop=True)
+    within_distance = np.hypot(*(nearest - coordinates).T) <= max_snap_distance
+    coordinates = np.where(within_distance[:, np.newaxis], nearest, coordinates)
+    moved = np.split(coordinates, np.cumsum(counts)[:-1])
+    empty = np.empty((0, 2))
+    return [line if (line != line[0]).any() else empty for line in moved]
 
 
-def _extend_last_feature(
-    snapped: pd.DataFrame, lines: gpd.GeoDataFrame, last_position: int, grid
-) -> pd.DataFrame:
-    """
-    Snap the edge of the end cell of the last feature, as iMOD5 does.
-
-    This only happens if that feature already snaps to at least one edge: a line
-    within a single cell snaps to nothing, and extending it would wrongly give
-    it edges. Only the extended line is snapped again.
-    """
-    last_rows = np.flatnonzero(lines["position"].to_numpy() == last_position)
-    if last_rows.size == 0 or not np.isin(last_rows[-1], snapped["line_index"]):
-        return snapped
-    row = int(last_rows[-1])
-    extended = gpd.GeoDataFrame(
-        geometry=[_extend_line_end(lines.geometry.iloc[row], grid)], crs=lines.crs
-    )
-    extended_snapped = xu.create_snap_to_grid_dataframe(
-        extended, grid, max_snap_distance=0.0
-    )
-    extended_snapped["line_index"] = row
-    return pd.concat(
-        [snapped[snapped["line_index"] != row], extended_snapped], ignore_index=True
-    )
-
-
-def _edges_to_geometries(
-    snapped: pd.DataFrame, lines: gpd.GeoDataFrame, grid
+def _merged_lines(
+    grid: GridSpec, edges: pd.DataFrame
 ) -> tuple[list[int], list[shapely.geometry.base.BaseGeometry]]:
     """
     Merge the snapped edges into one geometry per original row.
 
     Returns the positions of the original rows and their geometries, in input
-    order. Edges hit twice by the same row are kept once.
+    order.
     """
-    edge_coordinates = grid.node_coordinates[grid.edge_node_connectivity]
-    snapped = snapped.assign(
-        position=lines["position"].to_numpy()[snapped["line_index"].to_numpy()]
-    ).drop_duplicates(["position", "edge_index"])
+    end_points = wall_end_points(grid, edges)
     positions = []
     geometries = []
-    for position, group in snapped.groupby("position", sort=True):
-        segments = shapely.linestrings(edge_coordinates[group["edge_index"].to_numpy()])
+    for position, group in edges.groupby("position", sort=True):
+        segments = shapely.linestrings(end_points[group.index.to_numpy()])
         positions.append(position)
         geometries.append(shapely.line_merge(shapely.multilinestrings(segments)))
     return positions, geometries
@@ -183,86 +137,117 @@ def snap_gen_to_grid(
     window: tuple[float, float, float, float] | None = None,
     cellsize: float | None = None,
     max_snap_distance: float = 0.0,
+    top: xr.DataArray | None = None,
+    bottom: xr.DataArray | None = None,
 ) -> GeoDataFrameType:
     """
     Snap line features to the cell edges of a structured grid.
 
-    The edge selection follows iMOD5's GENSNAPTOGRID: a line selects an edge
-    when it crosses the segment joining the centres of the two cells sharing 
-    that edge, and, for the last feature only, the edge of the cell holding its
-    last vertex is added as well. Lines passing exactly through cell centres are 
-    ties; the result can differ from iMOD5 there.
+    Edge selection uses xugrid, with a parallel-grid-line retry for otherwise
+    empty straight cell-centre lines; see the module docstring.
 
-    Features are clipped to the grid extent and never merged across input rows.
+    Without ``top`` and ``bottom`` features are never merged across input rows.
     Features producing no edges are omitted. Disconnected snapped parts are
-    retained as a MultiLineString in a single output row.
-    Only edges between two cells are selected; exterior domain edges are omitted.
+    retained as a MultiLineString in a single output row. Only edges between two
+    cells are selected; exterior domain edges are omitted.
+
+    With ``top`` and ``bottom`` (``I3D=1`` of iMOD5) each snapped edge becomes a
+    closed vertical polygon with Z values instead, written once however many
+    features snap to it, in iMOD5's raster order, with the attributes of the
+    first feature that snapped to it.
 
     Parameters
     ----------
     gdf : geopandas.GeoDataFrame
-        Non-empty LineString geometries and their attributes. Z values are
-        ignored.
+        Non-empty LineString or Polygon geometries and their attributes. Z
+        values are ignored and polygons are snapped as their exterior ring.
     like : xarray.DataArray, optional
-        Two-dimensional grid with x and y coordinates. Data values, including
-        nodata, do not affect the target grid.
+        Two-dimensional grid with x and y coordinates, equidistant or not. Data
+        values, including nodata, do not affect the target grid.
     window : tuple of float, optional
-        xmin, ymin, xmax, ymax. With ``like``, select cells by their centres;
-        resulting cell edges can extend beyond the requested window.
+        xmin, ymin, xmax, ymax. Requires ``cellsize``: the grid starts at the
+        lower-left corner and drops the part of the window that does not fill a
+        cell, as iMOD5 does.
     cellsize : float, optional
         Positive cell size. Required with ``window`` when ``like`` is absent.
         Cannot be combined with ``like``.
     max_snap_distance : float, default 0.0
         Maximum distance in coordinate units for moving input vertices onto
         nearby grid nodes before snapping, not a line-to-edge cutoff. iMOD5 does
-        not move vertices, so the default of zero only moves vertices lying
-        exactly on a node, and reproduces iMOD5. Larger values change which
-        edges are selected.
+        not move vertices, so the default of zero does not move any vertex and
+        avoids vertex pre-snapping. Larger values change which edges are selected.
+    top, bottom : xarray.DataArray, optional
+        ``IDF_TOP`` and ``IDF_BOT``: two-dimensional grids with ``x`` and ``y``
+        coordinates that give the top and bottom of the walls. Either both or
+        neither must be given. They must contain every cell of the target grid,
+        with the same cell size; nodata is NaN. They may cover a larger area.
 
     Returns
     -------
     geopandas.GeoDataFrame
-        Snapped geometries with original attributes and CRS, in input order,
-        with a new positional index. The input is not modified.
+        Snapped geometries with original attributes and CRS, in input order
+        (raster order for walls), with a new positional index. The input is not
+        modified. Empty if nothing snaps.
+
+    Raises
+    ------
+    ValueError
+        Invalid grid arguments, geometries or ``max_snap_distance``; only one of
+        ``top`` and ``bottom`` is given; or ``top`` or ``bottom`` is not on the
+        grid of the target.
     """
+    if (top is None) != (bottom is None):
+        raise ValueError("top and bottom must be given together.")
     target = create_target_grid(like, window, cellsize)
     if not np.isfinite(max_snap_distance) or max_snap_distance < 0.0:
         raise ValueError("max_snap_distance must be finite and non-negative.")
-
     _assert_only_line_geometries(gdf.geometry)
+    if top is not None:
+        top_values = cell_values(sample_on_grid(top, target, "top"))
+        bottom_values = cell_values(sample_on_grid(bottom, target, "bottom"))
 
     original = gdf.reset_index(drop=True)
-    if original.empty:
-        return original
     empty = original.iloc[:0].copy()
-
-    grid = as_ugrid_dataarray(xr.ones_like(target, dtype=bool)).grid
-    if grid.n_face == 1:
+    if original.empty:
         return empty
 
-    clipped = _clip_to_grid(original, target)
-    if clipped.empty:
+    grid = grid_spec(target)
+    lines = _vertices(original.geometry)
+    if max_snap_distance > 0.0:
+        lines = _snap_vertices_to_nodes(lines, grid, max_snap_distance)
+    edges = snap_lines_to_edges(lines, grid)
+    if edges.empty:
         return empty
 
-    # iMOD5 only extends the end of the last feature that reaches the grid, so
-    # find it before lines collapsed by vertex snapping are dropped.
-    last_position = clipped["position"].max()
-
-    lines = _snap_vertices_to_nodes(clipped, grid, max_snap_distance)
-    if lines.empty:
-        return empty
-    snapped = xu.create_snap_to_grid_dataframe(
-        lines[["geometry"]], grid, max_snap_distance=0.0
-    )
-    if snapped.empty:
-        return empty
-
-    snapped = _extend_last_feature(snapped, lines, last_position, grid)
-    positions, geometries = _edges_to_geometries(snapped, lines, grid)
-
+    if top is None:
+        positions, geometries = _merged_lines(grid, edges)
+    else:
+        edges, geometries = vertical_walls(
+            grid, unique_walls(edges), top_values, bottom_values
+        )
+        if edges.empty:
+            return empty
+        positions = edges["position"].to_numpy()
     result = original.iloc[positions].copy()
     result.geometry = geometries
     return result.reset_index(drop=True)
+
+
+def _write_gen_ascii_3d(path: Path, walls: gpd.GeoDataFrame) -> None:
+    """
+    Write the vertical walls of ``snap_gen_to_grid`` as a 3D ASCII GEN file: ids
+    1 to N, then x, y, z for each of the five vertices, as iMOD5 lays it out.
+
+    Binary GEN files cannot hold Z values.
+    """
+    rings = shapely.get_coordinates(walls.geometry.exterior, include_z=True)
+    lines = []
+    for number, ring in enumerate(rings.reshape(-1, 5, 3), start=1):
+        lines.append(f"{number:10d}")
+        lines.extend(",".join(f"{value:15.3f}" for value in vertex) for vertex in ring)
+        lines.append("END")
+    lines.append("END")
+    path.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
 def snap_gen_file_to_grid(
@@ -273,22 +258,33 @@ def snap_gen_file_to_grid(
     cellsize: float | None = None,
     max_snap_distance: float = 0.0,
     overwrite: bool = False,
+    idf_top: str | Path | None = None,
+    idf_bot: str | Path | None = None,
 ) -> None:
     """
-    Read a GEN file, snap its 2D lines to a grid, and write a binary GEN file.
+    Read a GEN file, snap its lines to a grid, and write a GEN file.
 
     Grid arguments have the same meaning as in :func:`snap_gen_to_grid`.
+
+    Without ``idf_top`` and ``idf_bot`` the output is a binary GEN file with the
+    merged lines of :func:`snap_gen_to_grid` and the attributes of the input.
     Multipart results are written as separate LineStrings with repeated
     attributes, since GEN does not support MultiLineStrings. GEN attributes are
-    stored as strings and field names are limited to eleven characters. GEN
-    files do not store a CRS.
+    stored as strings and field names are limited to eleven characters.
+
+    With ``idf_top`` and ``idf_bot`` (``I3D=1``) the output is a 3D ASCII GEN
+    file, as binary GEN files cannot hold Z values. It has one vertical polygon
+    per snapped edge, with the ids 1 to N as iMOD5 writes them: the ids and
+    attributes of the input are not written.
+
+    GEN files do not store a CRS.
 
     Parameters
     ----------
     genfile_in : str or pathlib.Path
         Input ASCII or binary GEN file.
     genfile_out : str or pathlib.Path
-        Output binary GEN file.
+        GEN file to write.
     like : xarray.DataArray, optional
         Target grid, for example a two-dimensional IDF read with ``imod.idf.open``.
     window : tuple of float, optional
@@ -300,26 +296,37 @@ def snap_gen_file_to_grid(
         snapping. See :func:`snap_gen_to_grid`.
     overwrite : bool, default False
         Allow replacing an existing output file.
+    idf_top, idf_bot : str or pathlib.Path, optional
+        IDFs with the top and the bottom of the walls: a single layer, on the
+        grid that is snapped to (see :func:`snap_gen_to_grid`). Either both or
+        neither must be given.
 
     Raises
     ------
     FileExistsError
         The output exists and ``overwrite`` is False.
     ValueError
-        No line features produce grid edges. No output is written in this case.
+        No line features produce grid edges, or only one of ``idf_top`` and
+        ``idf_bot`` is given. No output is written in this case.
     """
-
     destination = Path(genfile_out)
     if destination.exists() and not overwrite:
         raise FileExistsError(f"Output GEN file already exists: {destination}")
+    top = None if idf_top is None else open_idf_grid(idf_top)
+    bottom = None if idf_bot is None else open_idf_grid(idf_bot)
     snapped = snap_gen_to_grid(
         gen.read(genfile_in),
         like=like,
         window=window,
         cellsize=cellsize,
         max_snap_distance=max_snap_distance,
+        top=top,
+        bottom=bottom,
     )
     if snapped.empty:
         raise ValueError("No line features could be snapped to grid edges.")
+    if top is not None:
+        _write_gen_ascii_3d(destination, snapped)
+        return
     feature_type = "feature_type" if "feature_type" in snapped.columns else None
     gen.write(destination, snapped.explode(ignore_index=True), feature_type=feature_type)
