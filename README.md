@@ -246,3 +246,14 @@ keywords are not case sensitive:
 | `OVERWRITE` | No | `false` | Boolean | Allow overwriting existing result files. |
 | `OUTPUT_FOLDER` | No | next to each IPF | Path (string) | Not part of iMOD5. Folder for the results, which are written to a subfolder named after each IPF file. The log file is written here too. The IPF files must have different names. |
 | `LOGLEVEL` | No | `INFO` | Number (integer) or string. | The level of verbosity in the log file, choose from [`DEBUG`/`10`, `INFO`/`20`, `WARNING`/`30`, `ERROR`/`40`, `CRITICAL`/`50`] |
+
+#### Known differences with iMOD5
+
+MKWELLIPF gives the same results as iMOD5 5.6.1, except in some unusual cases, where iMOD5 puts
+wells in a layer, while MKWELLIPF leaves them out without a layer or rate:
+
+- A well screen that lies completely above the model. iMOD5 puts the well in layer 1.
+- A well screen where the top is lower than the bottom. iMOD5 puts the well in layer 1.
+- A well screen with no length (top equals bottom) when `MINKHT` is used. iMOD5 puts the well in the layer
+  where the screen is, even if that layer is below `MINKHT`.
+

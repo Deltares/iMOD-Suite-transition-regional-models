@@ -137,7 +137,7 @@ def build_results(
     rows = wells.loc[wells.index.repeat(nlayer)].reset_index(drop=True)
     rows = rows.assign(Q_ORG=rows[q_name])
     fraction = layers["FRACTION"].to_numpy()
-    rows[q_name] = np.where(fraction > 0, fraction * np.repeat(rates, nlayer), hnodata)
+    rows[q_name] = np.where(fraction > 0, np.round(fraction * np.repeat(rates, nlayer), 3), hnodata)
     rows = pd.concat([rows.rename(columns={q_name: "Q_ASSIGNED"}), layers], axis=1)
     assigned = fraction.reshape(-1, nlayer).sum(axis=1) > 0
     rows["ERROR_CODE"] = np.repeat(np.where(assigned, "-", "#"), nlayer)
@@ -174,9 +174,8 @@ def mkwellipf(settings: MkWellIpfSettings) -> list[Path]:
     written = []
     for ipf_file in settings.ipf_files:
         imod_logger.info(f"MKWELLIPF: processing {ipf_file}")
-        # Private, but imod-python's project file reader uses it too. Unlike imod.ipf.read it also
-        # gives the column with the .txt file names and their extension. dtype=str keeps values
-        # like well name 007 as they are.
+        # Using _read_ipf() instead of imod.ipf.read because it provides the column with the .txt 
+        # file names and their extension.
         wells, assoc_col, ext = imod.formats.ipf._read_ipf(
             ipf_file, {"dtype": str, "keep_default_na": False}
         )
