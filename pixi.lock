@@ -678,7 +678,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - pypi: git+https://github.com/Deltares/imod-python.git#b42acb8cc9d7ce35141c14b0754248145883c684
+      - pypi: git+https://github.com/Deltares/imod-python.git#9c0f14878239f3b0c92f5934bfd6499da4746dba
       - pypi: git+https://github.com/Deltares/imod_coupler.git#be844fb07beb264578cac11196924d91eb320b5e
       - pypi: git+https://github.com/Deltares/imod_coupler.git?subdirectory=pre-processing#be844fb07beb264578cac11196924d91eb320b5e
       - pypi: git+https://github.com/Deltares/xugrid.git#11788950cac7819e37e5e6dd10774b3c2a70fec9
@@ -1038,7 +1038,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - pypi: git+https://github.com/Deltares/imod-python.git#b42acb8cc9d7ce35141c14b0754248145883c684
+      - pypi: git+https://github.com/Deltares/imod-python.git#9c0f14878239f3b0c92f5934bfd6499da4746dba
       - pypi: git+https://github.com/Deltares/imod_coupler.git#be844fb07beb264578cac11196924d91eb320b5e
       - pypi: git+https://github.com/Deltares/imod_coupler.git?subdirectory=pre-processing#be844fb07beb264578cac11196924d91eb320b5e
       - pypi: git+https://github.com/Deltares/xugrid.git#11788950cac7819e37e5e6dd10774b3c2a70fec9
@@ -6502,7 +6502,7 @@ packages:
     - zstd >=1.5.7,<1.6.0a0
   size: 387535
   timestamp: 1786599623274
-- pypi: git+https://github.com/Deltares/imod-python.git#b42acb8cc9d7ce35141c14b0754248145883c684
+- pypi: git+https://github.com/Deltares/imod-python.git#9c0f14878239f3b0c92f5934bfd6499da4746dba
   name: imod
   version: 1.1.1.dev0
   requires_dist:
