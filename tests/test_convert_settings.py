@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from settings import ConvertSettings, read_convert_settings
+from src.settings import ConvertSettings, read_convert_settings
 
 PEELVENEN_INI = """\
 PRJFILE_IN=../Peelvenen/prjfiles/Peelvenen_relative_paths.PRJ
