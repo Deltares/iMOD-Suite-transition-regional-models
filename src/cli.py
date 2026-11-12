@@ -6,16 +6,18 @@ from pathlib import Path
 from src.convert import convert_model
 from src.genpuzzle import genpuzzle
 from src.log import add_filehandler, imod_logger, init_logging
+from src.mkwellipf import mkwellipf
 from src.settings import (
     ConvertSettings,
     GenSnapToGridSettings,
     read_convert_settings,
     read_gen_snap_to_grid_settings,
     read_genpuzzle_settings,
+    read_mkwellipf_settings,
 )
 from src.snapping import snap_gen_file_to_grid
 
-_CHOICES = ["convert", "gensnaptogrid", "genpuzzle"]
+_CHOICES = ["convert", "gensnaptogrid", "genpuzzle", "mkwellipf"]
 def parse_args():
     parser = argparse.ArgumentParser(
         description="CLI for executing iMOD-Suite transition regional models functions"
@@ -65,6 +67,13 @@ def _genpuzzle(ini_file: Path):
     )
     genpuzzle(settings.genfile_in, settings.genfile_out, settings.tolerance)
 
+def _mkwellipf(ini_file: Path):
+    settings = read_mkwellipf_settings(ini_file)
+    log_folder = settings.output_folder or settings.ipf_files[0].parent
+    log_folder.mkdir(parents=True, exist_ok=True)
+    add_filehandler(log_folder / "mkwellipf.log", settings.log_level)
+    mkwellipf(settings)
+
 
 def main():
     args = parse_args()
@@ -78,6 +87,8 @@ def main():
                 _gensnaptogrid(args.inifile)
             case "genpuzzle":
                 _genpuzzle(args.inifile)
+            case "mkwellipf":
+                _mkwellipf(args.inifile)
             case _:
                 raise ValueError(f"Unknown function specified, must be one of {_CHOICES}, got {args.function}.")
 

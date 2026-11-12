@@ -21,7 +21,6 @@ Z values are compared with a tolerance of 0.001.
 """
 
 import itertools
-import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,17 +34,10 @@ import xarray as xr
 
 from src.grid_helpers import grid_spec, open_idf_grid
 from src.snapping import snap_gen_file_to_grid
+from tests.imod5_utils import IMOD5_MARKS
+from tests.imod5_utils import run_imod5 as run_imod5_ini
 
-IMOD5_EXE = Path(
-    os.environ.get("IMOD5_EXE", r"C:\Development\bin\iMOD5\iMOD 5.6.1\iMOD_V5_6_1.exe")
-)
-pytestmark = [
-    pytest.mark.imod5,
-    pytest.mark.skipif(
-        not IMOD5_EXE.exists(),
-        reason=f"{IMOD5_EXE} not found. Set the IMOD5_EXE environment variable.",
-    ),
-]
+pytestmark = IMOD5_MARKS
 
 Coord = tuple[float, float] # (x, y)
 Line = list[Coord]
@@ -81,7 +73,6 @@ class Case:
     def varies_values(self) -> bool:
         """Only the TOP and BOT values differ from the default: no use with I3D=0."""
         return self.kind != "coded" or bool(self.nodata_cells)
-
 
 IDF_WINDOW: Window = (1.0, 0.0, 3.0, 4.0)
 HORIZONTAL: Line = [(0.1, 1.1), (3.9, 1.1)]
@@ -282,21 +273,9 @@ def run_imod5(
     if idf_top is not None:
         lines += ["I3D=1", f"IDF_TOP={idf_top}", f"IDF_BOT={idf_bot}"]
     inifile = case_dir / "snap.ini"
+    
     inifile.write_text("\n".join([*lines, ""]), encoding="ascii")
-    result = subprocess.run(
-        [str(IMOD5_EXE), str(inifile)],
-        cwd=case_dir,
-        capture_output=True,
-        text=True,
-        errors="replace",
-        timeout=120,
-        check=False,
-    )
-    (case_dir / "imod5_console.txt").write_text(
-        f"returncode: {result.returncode}\n--- stdout\n{result.stdout}\n--- stderr\n{result.stderr}\n",
-        encoding="utf-8",
-    )
-    return result
+    return run_imod5_ini(inifile)
 
 
 @pytest.fixture(scope="session", autouse=True)
