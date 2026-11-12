@@ -32,7 +32,7 @@ def raw(tmp_path: Path) -> dict[str, str]:
         "GENFILE_IN": str(genfile_in),
         "GENFILE_OUT": str(tmp_path / "out.gen"),
         "WINDOW": "0,0,4,4",
-        "CELLSIZE": "1",
+        "CELL_SIZE": "1",
     }
 
 
@@ -147,17 +147,16 @@ def test_idf_paths_resolve_against_ini_folder(
     assert settings.idf_bot == root / "bot.idf"
 
 
-def test_cell_size_is_accepted_as_alias(raw: dict[str, str]) -> None:
-    del raw["CELLSIZE"]
-    raw["CELL_SIZE"] = "2"
+def test_cellsize_is_not_an_alias_of_cell_size(raw: dict[str, str]) -> None:
+    del raw["CELL_SIZE"]
+    raw["CELLSIZE"] = "2"
 
-    settings = GenSnapToGridSettings.model_validate(raw)
+    with pytest.raises(ValidationError, match="(?i)cellsize"):
+        GenSnapToGridSettings.model_validate(raw)
 
-    assert settings.cellsize == 2.0
 
-
-def test_window_without_cellsize_is_rejected(raw: dict[str, str]) -> None:
-    del raw["CELLSIZE"]
+def test_window_without_cell_size_is_rejected(raw: dict[str, str]) -> None:
+    del raw["CELL_SIZE"]
 
     with pytest.raises(ValidationError, match="WINDOW"):
         GenSnapToGridSettings.model_validate(raw)
@@ -176,17 +175,17 @@ def test_window_with_idffile_ignores_the_idf_for_the_grid(
 
     assert settings.like is None
     assert settings.window == (0.0, 0.0, 4.0, 4.0)
-    assert settings.cellsize == 1.0
+    assert settings.cell_size == 1.0
     assert any("IDFFILE" in message for message in handler.messages)
 
 
-def test_idffile_with_cellsize_but_no_window_is_rejected(
+def test_idffile_with_cell_size_but_no_window_is_rejected(
     raw: dict[str, str], idf_files: tuple[Path, Path]
 ) -> None:
     del raw["WINDOW"]
     raw["IDFFILE"] = str(idf_files[0])
 
-    with pytest.raises(ValidationError, match="CELLSIZE"):
+    with pytest.raises(ValidationError, match="CELL_SIZE"):
         GenSnapToGridSettings.model_validate(raw)
 
 
@@ -205,7 +204,7 @@ def test_window_and_like_follow_the_settings(tmp_path: Path, raw: dict[str, str]
     grid = empty_2d(dx=1.0, xmin=0.0, xmax=4.0, dy=-1.0, ymin=0.0, ymax=4.0)
     imod.idf.save(tmp_path / "grid", grid.astype(np.float32))
     idf = next(tmp_path.glob("grid*.idf"))
-    del raw["WINDOW"], raw["CELLSIZE"]
+    del raw["WINDOW"], raw["CELL_SIZE"]
     raw["IDFFILE"] = str(idf)
 
     from_idf = GenSnapToGridSettings.model_validate(raw)

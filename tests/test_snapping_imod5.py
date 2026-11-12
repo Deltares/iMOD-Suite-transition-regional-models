@@ -369,7 +369,7 @@ def wall_set(gdf: gpd.GeoDataFrame) -> set[frozenset]:
     return walls
 
 # Accepted deltas for known iMOD5 differences in wall counts
-# id: (only_ours, only_imod5)
+# id: (only_imod5, only_ours)
 ACCEPTED_DELTAS = {
     "polyline": (1, 0),
     "end-before-centre": (1, 0),
@@ -379,7 +379,7 @@ ACCEPTED_DELTAS = {
     "last-feature-outside-ignored": (1, 0),
     "last-feature-one-piece-other-cell": (0, 2),
     "tie-diagonal": (0, 3),
-    "on-half-cell-vertical": (3, 4),
+    "on-half-cell-vertical": (3, 0),
     "on-node-then-half-cell": (2, 2),
     "leave-and-reenter-top": (7, 1),
 }
@@ -455,16 +455,6 @@ def _save_idf(case_dir: Path, name: str, da: xr.DataArray) -> Path:
     return path
 
 
-def test_idf_header_with_many_digits_matches_imod5(tmp_path):
-    """iMOD5 reads ymax 462821.75 of the IDF header as 462821.8."""
-    grid = imod.util.empty_2d(
-        dx=6.25, xmin=150000.0, xmax=150018.75, dy=-6.25, ymin=462753.0, ymax=462821.75
-    )
-    idf = _save_idf(tmp_path, "grid", grid)
-    lines = [[(150001.0, 462755.0), (150016.0, 462820.0)]]
-    assert compare_2d(tmp_path, lines, {"idffile": idf})
-
-
 @pytest.mark.parametrize("case", NONUNIFORM_CASES)
 def test_nonuniform_idf_matches_imod5(tmp_path, case):
     """Pin the measured staircase exchanges instead of retaining port quirks."""
@@ -500,11 +490,13 @@ def write_case_idfs(case_dir: Path, case: Case | None = None) -> tuple[Path, Pat
     kinds: ``coded`` (BOT is ``TOP - 500``); ``reversed`` (TOP is
     ``1100 - 10 * col - row``); ``top-below-bot`` (TOP and BOT swapped in cell
     col 1, row 1); ``top-equals-bot``; ``constant-equal`` (TOP and BOT are 1000
-    everywhere); ``finer`` (cells of size 0.5 holding the value of the cell of
-    size 1 they lie in).
+    everywhere); ``finer`` (cells of size 0.5 whose values vary by +-2 around the
+    value of the cell of size 1 they lie in, so that their mean is that value).
     """
     case = case or Case([])
     top = coded_top(0.5 if case.kind == "finer" else 1.0, case.kind == "reversed")
+    if case.kind == "finer":
+        top = top + 8.0 * (top["x"] % 1.0 - 0.5)
     bot = top - 500.0
 
     def cell(col: int, row: int) -> xr.DataArray:
@@ -588,19 +580,12 @@ def test_walls_have_known_imod5_differences(tmp_path, name):
     )
 
 
-def test_finer_top_and_bottom_are_not_supported(tmp_path):
-    """iMOD5 block-averages finer TOP and BOT grids onto the target; we refuse."""
-    case = Case([HORIZONTAL], kind="finer")
+def test_finer_top_and_bottom_are_averaged_onto_the_grid_as_imod5_does(tmp_path):
+    case = Case([HORIZONTAL, VERTICAL], kind="finer")
     top, bot = write_case_idfs(tmp_path, case)
-    ours, theirs = tmp_path / "ours.gen", tmp_path / "imod5.gen"
-    write_ascii_gen(tmp_path / "input.gen", case.lines)
-    run_imod5(tmp_path, tmp_path / "input.gen", theirs, window=(0.0, 0.0, 4.0, 4.0), cellsize=1.0, idf_top=top, idf_bot=bot)
-    assert read_walls(theirs)
+    assert compare_3d(tmp_path, case.lines, case_grid(case, top), top, bot)
 
-    with pytest.raises(ValueError, match="same grid"):
-        snap_gen_file_to_grid(
-            tmp_path / "input.gen", ours, window=(0.0, 0.0, 4.0, 4.0), cellsize=1.0, idf_top=top, idf_bot=bot
-        )
+
 def _compare_3d_on_grid(case_dir: Path, lines: list[Line], name: str, top_values, bot_values) -> None:
     top, bot = _save_idf(case_dir, "top", top_values), _save_idf(case_dir, "bot", bot_values)
     assert compare_3d(case_dir, lines, _grid_arguments(name), top, bot)

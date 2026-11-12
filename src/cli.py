@@ -50,7 +50,7 @@ def _gensnaptogrid(ini_file: Path):
         genfile_out=settings.genfile_out,
         like=settings.like,
         window=settings.window,
-        cellsize=settings.cellsize,
+        cellsize=settings.cell_size,
         max_snap_distance=settings.max_snap_distance,
         overwrite=settings.overwrite,
         # Only given with I3D=1, which selects the 3D output.

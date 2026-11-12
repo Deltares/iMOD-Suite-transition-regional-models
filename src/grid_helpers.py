@@ -5,6 +5,7 @@ from typing import NamedTuple
 import imod
 import numpy as np
 import xarray as xr
+import xugrid as xu
 from imod.util.spatial import empty_2d, spatial_reference
 
 
@@ -25,36 +26,7 @@ def open_idf_grid(path: Path | str) -> xr.DataArray:
             )
     if extra:
         da = da.squeeze(extra, drop=True)
-    da = da.transpose("y", "x").load()
-    da.attrs["imod5_header"] = _imod5_header(da)
-    return da
-
-
-def _seven_digits(value: float) -> float:
-    """
-    A header real as iMOD5 reads it: ``IDFREADREAL`` reads a single precision
-    value, writes it as text and reads that back as a double, which leaves
-    about 7 significant digits (462821.75 becomes 462821.8).
-    """
-    return float(f"{np.float32(value):.6e}")
-
-
-def _imod5_header(da: xr.DataArray) -> dict | None:
-    """The equidistant grid of an IDF as iMOD5 reads it, or None if it is not equidistant."""
-    dx, xmin, _, dy, _, ymax = spatial_reference(da)
-    if np.ndim(dx) != 0 or np.ndim(dy) != 0:
-        return None
-    return {
-        "xmin": _seven_digits(xmin),
-        "ymax": _seven_digits(ymax),
-        "csx": _seven_digits(abs(dx)),
-        "csy": _seven_digits(abs(dy)),
-        # The grid this describes: a selection of other cells is not it.
-        "ncol": da.sizes["x"],
-        "nrow": da.sizes["y"],
-        "x0": float(da["x"][0]),
-        "y0": float(da["y"][0]),
-    }
+    return da.transpose("y", "x").load()
 
 
 def _validate_window(window: tuple[float, float, float, float]) -> None:
@@ -130,19 +102,20 @@ def create_target_grid(
 
 class GridSpec(NamedTuple):
     """
-    A structured grid as iMOD5 sees it. Row 0 is the northernmost row.
+    A structured grid. Row 0 is the northernmost row.
 
     ``xmin`` and ``ymax`` are the north-west corner. For an equidistant grid
-    ``csx`` and ``csy`` are the (positive) cell sizes and ``xnodes`` and
-    ``ynodes`` are None. For a non-equidistant grid ``csx`` and ``csy`` are NaN,
-    ``xnodes`` holds the ``ncol + 1`` cell edges from west to east and
-    ``ynodes`` the ``nrow + 1`` cell edges from north to south.
+    ``dx`` is the cell size along x and ``dy`` the cell size along y, which is
+    negative as rows run from north to south; ``xnodes`` and ``ynodes`` are
+    None. For a non-equidistant grid ``dx`` and ``dy`` are NaN, ``xnodes`` holds
+    the ``ncol + 1`` cell edges from west to east and ``ynodes`` the
+    ``nrow + 1`` cell edges from north to south.
     """
 
     xmin: float
     ymax: float
-    csx: float
-    csy: float
+    dx: float
+    dy: float
     ncol: int
     nrow: int
     xnodes: np.ndarray | None = None
@@ -154,17 +127,17 @@ class GridSpec(NamedTuple):
 
 
 def x_nodes(grid: GridSpec) -> np.ndarray:
-    """The ``ncol + 1`` cell edges from west to east, as ``IDFFILLSXSY`` computes them."""
+    """The ``ncol + 1`` cell edges from west to east."""
     if grid.xnodes is not None:
         return grid.xnodes
-    return np.arange(grid.ncol + 1, dtype=np.float64) * grid.csx + grid.xmin
+    return np.arange(grid.ncol + 1, dtype=np.float64) * grid.dx + grid.xmin
 
 
 def y_nodes(grid: GridSpec) -> np.ndarray:
     """The ``nrow + 1`` cell edges from north to south."""
     if grid.ynodes is not None:
         return grid.ynodes
-    return -np.arange(grid.nrow + 1, dtype=np.float64) * grid.csy + grid.ymax
+    return np.arange(grid.nrow + 1, dtype=np.float64) * grid.dy + grid.ymax
 
 
 def grid_spec(target: xr.DataArray) -> GridSpec:
@@ -183,18 +156,8 @@ def grid_spec(target: xr.DataArray) -> GridSpec:
     dx, xmin, _, dy, _, ymax = spatial_reference(target)
     ncol, nrow = target.sizes["x"], target.sizes["y"]
     if np.ndim(dx) == 0 and np.ndim(dy) == 0:
-        header = target.attrs.get("imod5_header")
-        if (
-            header is not None
-            and (header["ncol"], header["nrow"]) == (ncol, nrow)
-            and header["x0"] == float(target["x"][0])
-            and header["y0"] == float(target["y"][0])
-        ):
-            return GridSpec(
-                header["xmin"], header["ymax"], header["csx"], header["csy"], ncol, nrow
-            )
         return GridSpec(
-            float(xmin), float(ymax), abs(float(dx)), abs(float(dy)), ncol, nrow
+            float(xmin), float(ymax), abs(float(dx)), -abs(float(dy)), ncol, nrow
         )
 
     dx_array = np.broadcast_to(np.abs(dx), (ncol,)).astype(np.float64)
@@ -214,53 +177,19 @@ def grid_spec(target: xr.DataArray) -> GridSpec:
     )
 
 
-def _uniform_spacing(da: xr.DataArray, dim: str) -> float | None:
-    """Cell size along ``dim``, or None if it is unknown or not uniform."""
-    coords = np.asarray(da[dim].values, dtype=float)
-    if coords.size > 1:
-        spacing = np.abs(np.diff(coords))
-    else:
-        size = da.coords.get(f"d{dim}")
-        if size is None:
-            return None
-        spacing = np.abs(np.atleast_1d(size.values).astype(float))
-    if not np.allclose(spacing, spacing[0], rtol=1e-6):
-        return None
-    return float(spacing[0])
-
-
-def sample_on_grid(values: xr.DataArray, target: xr.DataArray, name: str) -> xr.DataArray:
+def regrid_to_target(values: xr.DataArray, target: xr.DataArray, name: str) -> xr.DataArray:
     """
-    Select the cells of ``target`` from ``values``, which may be larger.
+    Area-weighted mean of ``values`` over the cells of ``target``.
 
-    Raises a ValueError if ``values`` is not two-dimensional, has other cells
-    than the target, or lacks a cell centre of the target.
+    ``values`` may have other cell sizes and extent than ``target``. Nodata
+    (NaN) is ignored; cells of ``target`` without any valid value are NaN.
     """
     if values.ndim != 2 or set(values.dims) != {"x", "y"}:
         raise ValueError(
             f"{name} must be a two-dimensional grid with x and y dimensions."
         )
-    sizes = []
-    for dim in ("x", "y"):
-        own = _uniform_spacing(values, dim)
-        wanted = _uniform_spacing(target, dim)
-        if own is not None and wanted is not None:
-            if not np.isclose(own, wanted, rtol=1e-6):
-                raise ValueError(
-                    f"The {name} grid has cells of size {own} along {dim}, but "
-                    f"the target grid has {wanted}: both must be on the same grid."
-                )
-            sizes.append(wanted)
-    tolerance = 1e-6 * (min(sizes) if sizes else 1.0)
-    x, y = target["x"].values, target["y"].values
-    try:
-        selected = values.sel(x=x, y=y, method="nearest", tolerance=tolerance)
-    except KeyError as e:
-        raise ValueError(
-            f"The {name} grid does not contain every cell centre of the target "
-            "grid: both must be on the same grid."
-        ) from e
-    return selected.assign_coords(x=x, y=y).transpose(*target.dims)
+    regridder = xu.OverlapRegridder(source=values, target=target, method="mean")
+    return regridder.regrid(values)
 
 
 def cell_values(values: xr.DataArray) -> np.ndarray:
