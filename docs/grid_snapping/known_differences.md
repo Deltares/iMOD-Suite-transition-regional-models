@@ -6,9 +6,11 @@ Reference edges come from actual iMOD5 executable GENSNAPTOGRID output, not a Py
 
 Missing = executable-only; added = candidate-only. 15 of 48 cases differ from the executable, and each of them is drawn under Figures. A library error is reported explicitly, never counted as a successful empty result.
 
-Blue: iMOD5 executable. Orange: Repository implementation. Difference panel: red = executable-only, purple = candidate-only, grey = shared.
+Blue: iMOD5 executable. Orange: Repository implementation. Difference panel: grey = shared, red = missing (iMOD5 executable-only), purple = added (candidate-only), small grey dots = cell centers.
 
-## Measured results
+Cases equal: 33; cases different: 15; snapped edges equal: 57917; snapped edges different: 37.
+
+Totals exclude cases with errors. Equal edges are shared walls; different edges are missing plus added walls, summed across cases.
 
 | Case | iMOD5 executable walls | Repository implementation walls | Missing | Added |
 |---|---:|---:|---:|---:|
@@ -131,7 +133,7 @@ Blue: iMOD5 executable. Orange: Repository implementation. Difference panel: red
   "executable": "C:\\Development\\bin\\iMOD5\\iMOD 5.6.1\\iMOD_V5_6_1.exe",
   "python": "3.13.18",
   "xugrid": "0.15.3",
-  "imod": "1.1.0"
+  "imod": "1.1.1.dev0"
 }
 ```
 

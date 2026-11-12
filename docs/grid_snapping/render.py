@@ -8,6 +8,14 @@ def edge_set(edges):
     return {tuple(map(tuple, edge)) for edge in edges}
 
 
+def cell_centers(record):
+    if not record["xnodes"] or not record["ynodes"]:
+        return []
+    x_centers = [0.5 * (a + b) for a, b in zip(record["xnodes"], record["xnodes"][1:])]
+    y_centers = [0.5 * (a + b) for a, b in zip(record["ynodes"], record["ynodes"][1:])]
+    return [(x, y) for y in y_centers for x in x_centers]
+
+
 def has_figure(record, records):
     """Every case that differs from the executable is drawn, or the only case."""
     if record["error"] is not None:
@@ -25,6 +33,8 @@ def render(record, candidate_label):
     ys = record["ynodes"] + [p[1] for line in record["lines"] for p in line]
     xmin, xmax, ymin, ymax = min(xs) - .3, max(xs) + .3, min(ys) - .3, max(ys) + .3
     scale = min(300 / (xmax - xmin), 310 / (ymax - ymin))
+    cell_points = cell_centers(record)
+
     parts = [
         '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500" role="img">',
         f'<title>{html.escape(record["name"])}</title>',
@@ -64,6 +74,9 @@ def render(record, candidate_label):
             x1, y1 = xy((max(record["xnodes"]), y))
             parts.append(f'<line x1="{x0}" y1="{y0}" x2="{x1}" y2="{y1}" stroke="#dde3eb"/>')
             parts.append(f'<text x="{x0-8}" y="{y0+4}" text-anchor="end">{y:g}</text>')
+        for cx, cy in cell_points:
+            px, py = xy((cx, cy))
+            parts.append(f'<circle cx="{px}" cy="{py}" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>')
         for edges, colour in groups:
             for first, second in sorted(edges):
                 x0, y0 = xy(first)
@@ -78,10 +91,22 @@ def render(record, candidate_label):
             for point, fill in ((line[0], "white"), (line[-1], "#353c47")):
                 x, y = xy(point)
                 parts.append(f'<circle cx="{x}" cy="{y}" r="4" fill="{fill}" stroke="#353c47"/>')
+
     parts.extend([
+        '<g font-size="12">',
+        '<rect x="28" y="430" width="520" height="56" fill="#f8fafc" stroke="#dfe5ee" rx="8"/>',
+        '<line x1="42" y1="445" x2="74" y2="445" stroke="#1264a3" stroke-width="4"/>',
+        '<text x="82" y="449">iMOD5 executable</text>',
+        '<line x1="210" y1="445" x2="242" y2="445" stroke="#c26b00" stroke-width="4"/>',
+        '<text x="250" y="449">' + html.escape(candidate_label) + '</text>',
+        '<line x1="42" y1="462" x2="74" y2="462" stroke="#c21d42" stroke-width="4"/>',
+        '<text x="82" y="466">Missing</text>',
+        '<line x1="210" y1="462" x2="242" y2="462" stroke="#7c3aed" stroke-width="4"/>',
+        '<text x="250" y="466">Added</text>',
+        '<circle cx="365" cy="462" r="3.5" fill="#5f6f83" stroke="#5f6f83"/>',
+        '<text x="375" y="466">Cell centers</text>',
+        '</g>',
         '<text x="32" y="465">Dashed: input; open=start, filled=end</text>',
-        '<text x="420" y="465">Red: iMOD5 executable only</text>',
-        f'<text x="800" y="465">Purple: {html.escape(candidate_label)} only</text>',
         '</svg>',
     ])
     return "\n".join(parts)
@@ -118,21 +143,25 @@ def write_report(records, destination, candidate_label, metadata):
         "them is drawn under Figures. A library error is "
         "reported explicitly, never counted as a successful empty result.", "",
         "Blue: iMOD5 executable. Orange: " + candidate_label
-        + ". Difference panel: red = executable-only, purple = candidate-only, grey = shared.",
-        "", "## Measured results", "",
-        "| Case | iMOD5 executable walls | " + candidate_label + " walls | Missing | Added |",
-        "|---|---:|---:|---:|---:|",
+        + ". Difference panel: grey = shared, red = missing (iMOD5 executable-only), "
+        + "purple = added (candidate-only), small grey dots = cell centers.",
     ]
-    rows, sections = [], []
+    markdown_rows, rows, sections = [], [], []
+    equal_cases = different_cases = equal_edges = different_edges = 0
     for record in records:
         reference = edge_set(record["reference"])
         if record["error"] is not None:
             values = [record["name"], str(len(reference)), "ERROR: " + record["error"], "-", "-"]
         else:
             candidate = edge_set(record["candidate"])
+            missing, added = reference - candidate, candidate - reference
+            equal_cases += reference == candidate
+            different_cases += reference != candidate
+            equal_edges += len(reference & candidate)
+            different_edges += len(missing) + len(added)
             values = [record["name"], str(len(reference)), str(len(candidate)),
-                      str(len(reference - candidate)), str(len(candidate - reference))]
-        markdown.append("| " + " | ".join(values) + " |")
+                      str(len(missing)), str(len(added))]
+        markdown_rows.append("| " + " | ".join(values) + " |")
         rows.append("<tr>" + "".join(f"<td>{html.escape(v)}</td>" for v in values) + "</tr>")
         if has_figure(record, records):
             svg = render(record, candidate_label)
@@ -141,6 +170,20 @@ def write_report(records, destination, candidate_label, metadata):
                 f'<section id="{record["name"]}"><h2>{html.escape(record["name"])}</h2>'
                 + svg + "</section>"
             )
+    summary = (
+        f"Cases equal: {equal_cases}; cases different: {different_cases}; "
+        f"snapped edges equal: {equal_edges}; snapped edges different: {different_edges}."
+    )
+    summary_method = (
+        "Totals exclude cases with errors. Equal edges are shared walls; different "
+        "edges are missing plus added walls, summed across cases."
+    )
+    markdown.extend([
+        "", summary, "", summary_method, "",
+        "| Case | iMOD5 executable walls | " + candidate_label + " walls | Missing | Added |",
+        "|---|---:|---:|---:|---:|",
+        *markdown_rows,
+    ])
     markdown.extend(["", "## Figures", ""])
     for record in records:
         if has_figure(record, records):
@@ -168,7 +211,9 @@ def write_report(records, destination, candidate_label, metadata):
         '<p><a href="known_differences.md">Markdown report</a> | '
         '<a href="results.json">Measured data</a></p>',
         "<p>Blue: iMOD5 executable. Orange: " + html.escape(candidate_label)
-        + ". Red: executable-only. Purple: candidate-only. Grey: shared.</p>",
+        + ". Red: missing (iMOD5 executable-only). Purple: added (candidate-only). "
+        + "Grey: shared. Small grey dots: cell centers.</p>",
+        f"<p>{html.escape(summary)}</p><p>{html.escape(summary_method)}</p>",
         "<table><thead><tr>" + "".join(f"<th>{html.escape(h)}</th>" for h in headers)
         + "</tr></thead><tbody>" + "\n".join(rows) + "</tbody></table>",
         *sections,

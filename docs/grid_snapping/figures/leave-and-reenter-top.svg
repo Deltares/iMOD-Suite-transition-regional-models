@@ -26,6 +26,22 @@
 <text x="63.28571428571429" y="358.03571428571433" text-anchor="end">1</text>
 <line x1="71.28571428571429" y1="409.39285714285717" x2="292.7142857142857" y2="409.39285714285717" stroke="#dde3eb"/>
 <text x="63.28571428571429" y="413.39285714285717" text-anchor="end">0</text>
+<circle cx="98.96428571428572" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="154.32142857142858" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="209.67857142857144" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="265.0357142857143" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="98.96428571428572" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="154.32142857142858" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="209.67857142857144" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="265.0357142857143" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="98.96428571428572" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="154.32142857142858" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="209.67857142857144" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="265.0357142857143" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="98.96428571428572" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="154.32142857142858" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="209.67857142857144" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="265.0357142857143" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
 <line x1="126.64285714285715" y1="298.67857142857144" x2="126.64285714285715" y2="243.32142857142856" stroke="#1264a3" stroke-width="5" stroke-linecap="round"/>
 <line x1="126.64285714285715" y1="298.67857142857144" x2="182.0" y2="298.67857142857144" stroke="#1264a3" stroke-width="5" stroke-linecap="round"/>
 <line x1="126.64285714285715" y1="243.32142857142856" x2="126.64285714285715" y2="187.96428571428572" stroke="#1264a3" stroke-width="5" stroke-linecap="round"/>
@@ -59,6 +75,22 @@
 <text x="463.2857142857143" y="358.03571428571433" text-anchor="end">1</text>
 <line x1="471.2857142857143" y1="409.39285714285717" x2="692.7142857142858" y2="409.39285714285717" stroke="#dde3eb"/>
 <text x="463.2857142857143" y="413.39285714285717" text-anchor="end">0</text>
+<circle cx="498.9642857142857" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="554.3214285714286" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="609.6785714285714" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="665.0357142857143" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="498.9642857142857" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="554.3214285714286" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="609.6785714285714" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="665.0357142857143" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="498.9642857142857" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="554.3214285714286" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="609.6785714285714" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="665.0357142857143" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="498.9642857142857" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="554.3214285714286" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="609.6785714285714" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="665.0357142857143" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
 <line x1="526.6428571428571" y1="354.03571428571433" x2="526.6428571428571" y2="298.67857142857144" stroke="#c26b00" stroke-width="5" stroke-linecap="round"/>
 <line x1="526.6428571428571" y1="298.67857142857144" x2="526.6428571428571" y2="243.32142857142856" stroke="#c26b00" stroke-width="5" stroke-linecap="round"/>
 <line x1="526.6428571428571" y1="243.32142857142856" x2="526.6428571428571" y2="187.96428571428572" stroke="#c26b00" stroke-width="5" stroke-linecap="round"/>
@@ -86,6 +118,22 @@
 <text x="863.2857142857143" y="358.03571428571433" text-anchor="end">1</text>
 <line x1="871.2857142857143" y1="409.39285714285717" x2="1092.7142857142858" y2="409.39285714285717" stroke="#dde3eb"/>
 <text x="863.2857142857143" y="413.39285714285717" text-anchor="end">0</text>
+<circle cx="898.9642857142858" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="954.3214285714286" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="1009.6785714285714" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="1065.0357142857142" cy="215.64285714285714" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="898.9642857142858" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="954.3214285714286" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="1009.6785714285714" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="1065.0357142857142" cy="271.0" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="898.9642857142858" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="954.3214285714286" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="1009.6785714285714" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="1065.0357142857142" cy="326.3571428571429" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="898.9642857142858" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="954.3214285714286" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="1009.6785714285714" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
+<circle cx="1065.0357142857142" cy="381.7142857142857" r="2.5" fill="#5f6f83" stroke="#5f6f83" opacity="0.9"/>
 <line x1="926.6428571428571" y1="298.67857142857144" x2="926.6428571428571" y2="243.32142857142856" stroke="#b8c3ce" stroke-width="5" stroke-linecap="round"/>
 <line x1="926.6428571428571" y1="243.32142857142856" x2="926.6428571428571" y2="187.96428571428572" stroke="#b8c3ce" stroke-width="5" stroke-linecap="round"/>
 <line x1="926.6428571428571" y1="298.67857142857144" x2="982.0" y2="298.67857142857144" stroke="#c21d42" stroke-width="5" stroke-linecap="round"/>
@@ -99,7 +147,18 @@
 <polyline points="954.32,326.36 954.32,132.61 1065.04,132.61 1065.04,326.36" class="input"/>
 <circle cx="954.3214285714286" cy="326.3571428571429" r="4" fill="white" stroke="#353c47"/>
 <circle cx="1065.0357142857142" cy="326.3571428571429" r="4" fill="#353c47" stroke="#353c47"/>
+<g font-size="12">
+<rect x="28" y="430" width="520" height="56" fill="#f8fafc" stroke="#dfe5ee" rx="8"/>
+<line x1="42" y1="445" x2="74" y2="445" stroke="#1264a3" stroke-width="4"/>
+<text x="82" y="449">iMOD5 executable</text>
+<line x1="210" y1="445" x2="242" y2="445" stroke="#c26b00" stroke-width="4"/>
+<text x="250" y="449">Repository implementation</text>
+<line x1="42" y1="462" x2="74" y2="462" stroke="#c21d42" stroke-width="4"/>
+<text x="82" y="466">Missing</text>
+<line x1="210" y1="462" x2="242" y2="462" stroke="#7c3aed" stroke-width="4"/>
+<text x="250" y="466">Added</text>
+<circle cx="365" cy="462" r="3.5" fill="#5f6f83" stroke="#5f6f83"/>
+<text x="375" y="466">Cell centers</text>
+</g>
 <text x="32" y="465">Dashed: input; open=start, filled=end</text>
-<text x="420" y="465">Red: iMOD5 executable only</text>
-<text x="800" y="465">Purple: Repository implementation only</text>
 </svg>
