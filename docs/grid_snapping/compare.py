@@ -19,7 +19,7 @@ from src.grid_helpers import (
     y_nodes,
 )
 from src.snapping import snap_gen_to_grid
-from tests import test_snapping_imod5 as oracle
+from tests import test_snapping_imod5 as imod5_tests
 
 HERE = Path(__file__).resolve().parent
 
@@ -30,7 +30,10 @@ def edge_key(endpoints):
 
 def output_edges(path):
     """Read actual GEN output, including the executable's explicit empty file."""
-    return sorted(edge_key(edge) for edge in oracle.wall_set(oracle.read_gen_or_empty(path)))
+    return sorted(
+        edge_key(edge)
+        for edge in imod5_tests.wall_set(imod5_tests.read_gen_or_empty(path))
+    )
 
 
 def measure(name, lines, arguments, directory, default_xugrid=False):
@@ -40,8 +43,8 @@ def measure(name, lines, arguments, directory, default_xugrid=False):
     source, reference = [directory / name for name in (
         "input.gen", "imod5.gen",
     )]
-    oracle.write_ascii_gen(source, lines)
-    process = oracle.run_imod5(directory, source, reference, **arguments)
+    imod5_tests.write_ascii_gen(source, lines)
+    process = imod5_tests.run_imod5(directory, source, reference, **arguments)
     if process.returncode != 0 or not reference.exists():
         raise RuntimeError(
             f"iMOD5 failed for {name} (exit {process.returncode}).\n"
@@ -74,7 +77,7 @@ def measure(name, lines, arguments, directory, default_xugrid=False):
             geometry, like=like, window=arguments.get("window"),
             cellsize=cellsize,
         )
-        edges = sorted(edge_key(edge) for edge in oracle.wall_set(result))
+        edges = sorted(edge_key(edge) for edge in imod5_tests.wall_set(result))
     return {
         "name": name,
         "lines": [np.round(line, 6).tolist() for line in lines],
@@ -90,38 +93,38 @@ def main(argv=None):
         help="Create the separate one-off raw xugrid comparison, not the repository report.",
     )
     options = parser.parse_args(argv)
-    if not oracle.IMOD5_EXE.is_file():
+    if not imod5_tests.IMOD5_EXE.is_file():
         raise FileNotFoundError(
-            f"iMOD5 executable not found: {oracle.IMOD5_EXE}. Set IMOD5_EXE to its path."
+            f"iMOD5 executable not found: {imod5_tests.IMOD5_EXE}. Set IMOD5_EXE to its path."
         )
     records = []
     with tempfile.TemporaryDirectory(prefix="grid-snapping-") as work:
         work = Path(work)
-        for name in oracle.GEOMETRY_CASES:
-            case = oracle.CASES[name]
+        for name in imod5_tests.GEOMETRY_CASES:
+            case = imod5_tests.CASES[name]
             arguments = {"window": (0., 0., 4., 4.), "cellsize": 1.}
             if case.grid != "window":
                 idf_dir = work / (name + "-idf")
                 idf_dir.mkdir()
-                top, _ = oracle.write_case_idfs(idf_dir, case)
+                top, _ = imod5_tests.write_case_idfs(idf_dir, case)
                 arguments = {"idffile": top}
                 if case.grid == "idffile-window":
-                    arguments["window"] = oracle.IDF_WINDOW
+                    arguments["window"] = imod5_tests.IDF_WINDOW
                     arguments["cellsize"] = 1.
             records.append(measure(
                 name, case.lines, arguments, work / name, options.default_xugrid
             ))
         nonuniform = imod.util.empty_2d(
-            dx=np.array(oracle.NONUNIFORM_DX), xmin=0., xmax=sum(oracle.NONUNIFORM_DX),
-            dy=-np.array(oracle.NONUNIFORM_DY[::-1]), ymin=0., ymax=sum(oracle.NONUNIFORM_DY),
+            dx=np.array(imod5_tests.NONUNIFORM_DX), xmin=0., xmax=sum(imod5_tests.NONUNIFORM_DX),
+            dy=-np.array(imod5_tests.NONUNIFORM_DY[::-1]), ymin=0., ymax=sum(imod5_tests.NONUNIFORM_DY),
         )
-        idf = oracle._save_idf(work / "nonuniform-idf", "grid", nonuniform * 0. + 1.)
-        for name, lines in oracle.NONUNIFORM_CASES.items():
+        idf = imod5_tests._save_idf(work / "nonuniform-idf", "grid", nonuniform * 0. + 1.)
+        for name, lines in imod5_tests.NONUNIFORM_CASES.items():
             records.append(measure(
                 "nonuniform-" + name, lines, {"idffile": idf},
                 work / ("nonuniform-" + name), options.default_xugrid,
             ))
-        random = oracle.make_random_lines(12, 12, 500, np.random.default_rng(42))
+        random = imod5_tests.make_random_lines(12, 12, 500, np.random.default_rng(42))
         perturbed_rng = np.random.default_rng(43)
         perturbed = [
             (np.asarray(line) + perturbed_rng.uniform(-0.02, 0.02, (len(line), 2))).tolist()
@@ -137,17 +140,17 @@ def main(argv=None):
             ))
         for seed in (42, 7, 2026):
             name = f"large-meanders-{seed}"
-            lines = oracle.in_coordinates(
-                oracle.make_meandering_lines(1040, 1320, np.random.default_rng(seed)), "large"
+            lines = imod5_tests.in_coordinates(
+                imod5_tests.make_meandering_lines(1040, 1320, np.random.default_rng(seed)), "large"
             )
-            window, cellsize = oracle.grid_window("large")
+            window, cellsize = imod5_tests.grid_window("large")
             records.append(measure(
                 name, lines, {"window": window, "cellsize": cellsize},
                 work / name, options.default_xugrid,
             ))
     metadata = {
         "reference": "Actual iMOD5 executable (GENSNAPTOGRID)",
-        "executable": str(oracle.IMOD5_EXE),
+        "executable": str(imod5_tests.IMOD5_EXE),
         "python": platform.python_version(),
         **{package: importlib.metadata.version(package) for package in ("xugrid", "imod")},
     }

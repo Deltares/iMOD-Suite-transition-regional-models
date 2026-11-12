@@ -3,15 +3,18 @@
 import html
 import json
 
-FIGURE_NAMES = {
-    "end-before-centre", "polyline", "tie-diagonal", "on-half-cell-vertical",
-    "on-node-then-half-cell", "leave-and-reenter-top", "nonuniform-diagonal",
-    "random-feature-97",
-}
-
 
 def edge_set(edges):
     return {tuple(map(tuple, edge)) for edge in edges}
+
+
+def has_figure(record, records):
+    """Every case that differs from the executable is drawn, or the only case."""
+    if record["error"] is not None:
+        return False
+    if len(records) == 1:
+        return True
+    return edge_set(record["reference"]) != edge_set(record["candidate"])
 
 
 def render(record, candidate_label):
@@ -88,14 +91,17 @@ def write_report(records, destination, candidate_label, metadata):
     """Build Markdown, self-contained HTML, SVG figures and raw measured results."""
     figures = destination / "figures"
     figures.mkdir(parents=True, exist_ok=True)
+    for stale in figures.glob("*.svg"):
+        stale.unlink()
+    differing = sum(has_figure(record, records) for record in records)
     title = f"iMOD5 executable versus {candidate_label}"
     method = (
         "Reference edges come from actual iMOD5 executable GENSNAPTOGRID output, "
         "not a Python port. Candidate edges come from "
-        + ("this repository's public snap_gen_to_grid implementation, including its "
-           "centre-line correction." if candidate_label == "Repository implementation" else
+        + ("this repository's public snap_gen_to_grid implementation."
+           if candidate_label == "Repository implementation" else
            "unadjusted xugrid.create_snap_to_grid_dataframe, max_snap_distance=0.0, "
-           "default tolerance=1e-12; no repository centre-line correction or outside guard.")
+           "default tolerance=1e-12; no outside guard.")
         + " Both use the same serialized GEN input (six decimal places) and grid. "
         "Results compare combined unique geometric walls, NOT per-feature assignments. "
         "Direction, attributes, row order and 3D output are not assessed. "
@@ -107,7 +113,9 @@ def write_report(records, destination, candidate_label, metadata):
     markdown = [
         f"# {title}", "", method, "",
         "[Self-contained HTML gallery](known_differences.html) | [Measured data](results.json)",
-        "", "Missing = executable-only; added = candidate-only. A library error is "
+        "", "Missing = executable-only; added = candidate-only. "
+        f"{differing} of {len(records)} cases differ from the executable, and each of "
+        "them is drawn under Figures. A library error is "
         "reported explicitly, never counted as a successful empty result.", "",
         "Blue: iMOD5 executable. Orange: " + candidate_label
         + ". Difference panel: red = executable-only, purple = candidate-only, grey = shared.",
@@ -126,7 +134,7 @@ def write_report(records, destination, candidate_label, metadata):
                       str(len(reference - candidate)), str(len(candidate - reference))]
         markdown.append("| " + " | ".join(values) + " |")
         rows.append("<tr>" + "".join(f"<td>{html.escape(v)}</td>" for v in values) + "</tr>")
-        if record["error"] is None and (record["name"] in FIGURE_NAMES or len(records) == 1):
+        if has_figure(record, records):
             svg = render(record, candidate_label)
             (figures / f'{record["name"]}.svg').write_text(svg, encoding="utf-8")
             sections.append(
@@ -135,7 +143,7 @@ def write_report(records, destination, candidate_label, metadata):
             )
     markdown.extend(["", "## Figures", ""])
     for record in records:
-        if record["error"] is None and (record["name"] in FIGURE_NAMES or len(records) == 1):
+        if has_figure(record, records):
             markdown.extend([
                 f'### {record["name"]}', "",
                 f'![{title}: {record["name"]}](figures/{record["name"]}.svg)', "",
@@ -171,7 +179,7 @@ def write_report(records, destination, candidate_label, metadata):
     (destination / "known_differences.html").write_text("\n".join(page), encoding="utf-8")
     measurements = []
     for record in records:
-        if record["name"] in FIGURE_NAMES or len(records) == 1:
+        if has_figure(record, records):
             measurements.append(record)
             continue
         reference = edge_set(record["reference"])

@@ -1,10 +1,10 @@
 # iMOD5 executable versus Repository implementation
 
-Reference edges come from actual iMOD5 executable GENSNAPTOGRID output, not a Python port. Candidate edges come from this repository's public snap_gen_to_grid implementation, including its centre-line correction. Both use the same serialized GEN input (six decimal places) and grid. Results compare combined unique geometric walls, NOT per-feature assignments. Direction, attributes, row order and 3D output are not assessed. Dense random samples can hide per-feature differences. These are synthetic examples, not hydrological validation. Random perturbations use seed 43; tie-heavy inputs use seed 42. Random feature 97 is run in isolation, so iMOD5's final-feature rules apply to it.
+Reference edges come from actual iMOD5 executable GENSNAPTOGRID output, not a Python port. Candidate edges come from this repository's public snap_gen_to_grid implementation. Both use the same serialized GEN input (six decimal places) and grid. Results compare combined unique geometric walls, NOT per-feature assignments. Direction, attributes, row order and 3D output are not assessed. Dense random samples can hide per-feature differences. These are synthetic examples, not hydrological validation. Random perturbations use seed 43; tie-heavy inputs use seed 42. Random feature 97 is run in isolation, so iMOD5's final-feature rules apply to it.
 
 [Self-contained HTML gallery](known_differences.html) | [Measured data](results.json)
 
-Missing = executable-only; added = candidate-only. A library error is reported explicitly, never counted as a successful empty result.
+Missing = executable-only; added = candidate-only. 15 of 48 cases differ from the executable, and each of them is drawn under Figures. A library error is reported explicitly, never counted as a successful empty result.
 
 Blue: iMOD5 executable. Orange: Repository implementation. Difference panel: red = executable-only, purple = candidate-only, grey = shared.
 
@@ -40,7 +40,7 @@ Blue: iMOD5 executable. Orange: Repository implementation. Difference panel: red
 | last-feature-in-single-cell | 2 | 2 | 0 | 0 |
 | last-feature-one-piece-other-cell | 2 | 4 | 0 | 2 |
 | tie-diagonal | 1 | 4 | 0 | 3 |
-| on-half-cell-vertical | 3 | 4 | 3 | 4 |
+| on-half-cell-vertical | 3 | 0 | 3 | 0 |
 | on-half-cell-diagonal | 6 | 6 | 0 | 0 |
 | on-node-then-half-cell | 5 | 5 | 2 | 2 |
 | duplicate-vertices | 4 | 4 | 0 | 0 |
@@ -71,6 +71,26 @@ Blue: iMOD5 executable. Orange: Repository implementation. Difference panel: red
 
 ![iMOD5 executable versus Repository implementation: end-before-centre](figures/end-before-centre.svg)
 
+### end-x-before-centre
+
+![iMOD5 executable versus Repository implementation: end-x-before-centre](figures/end-x-before-centre.svg)
+
+### slanted-end-before-centre
+
+![iMOD5 executable versus Repository implementation: slanted-end-before-centre](figures/slanted-end-before-centre.svg)
+
+### last-feature-end-extended
+
+![iMOD5 executable versus Repository implementation: last-feature-end-extended](figures/last-feature-end-extended.svg)
+
+### last-feature-outside-ignored
+
+![iMOD5 executable versus Repository implementation: last-feature-outside-ignored](figures/last-feature-outside-ignored.svg)
+
+### last-feature-one-piece-other-cell
+
+![iMOD5 executable versus Repository implementation: last-feature-one-piece-other-cell](figures/last-feature-one-piece-other-cell.svg)
+
 ### tie-diagonal
 
 ![iMOD5 executable versus Repository implementation: tie-diagonal](figures/tie-diagonal.svg)
@@ -91,6 +111,14 @@ Blue: iMOD5 executable. Orange: Repository implementation. Difference panel: red
 
 ![iMOD5 executable versus Repository implementation: nonuniform-diagonal](figures/nonuniform-diagonal.svg)
 
+### nonuniform-polyline
+
+![iMOD5 executable versus Repository implementation: nonuniform-polyline](figures/nonuniform-polyline.svg)
+
+### nonuniform-leaving
+
+![iMOD5 executable versus Repository implementation: nonuniform-leaving](figures/nonuniform-leaving.svg)
+
 ### random-feature-97
 
 ![iMOD5 executable versus Repository implementation: random-feature-97](figures/random-feature-97.svg)
@@ -103,7 +131,7 @@ Blue: iMOD5 executable. Orange: Repository implementation. Difference panel: red
   "executable": "C:\\Development\\bin\\iMOD5\\iMOD 5.6.1\\iMOD_V5_6_1.exe",
   "python": "3.13.18",
   "xugrid": "0.15.3",
-  "imod": "1.1.1.dev0"
+  "imod": "1.1.0"
 }
 ```
 

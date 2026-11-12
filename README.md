@@ -113,10 +113,10 @@ not promised: slight endpoint, tie, re-entry and nonuniform-grid differences are
 accepted in exchange for maintainability. With `I3D=1` every edge becomes a
 vertical wall with the existing adjacent-cell TOP/BOT and ring-order rules.
 
-See the compact [xugrid adapter](src/grid_snapping.py) and the reference
+See the [snapping module](src/snapping.py) and the reference
 [known differences report](docs/grid_snapping/known_differences.md) or
-[self-contained HTML gallery](docs/grid_snapping/known_differences.html) for the measured
-tradeoffs and the centre-line correction.
+[self-contained HTML gallery](docs/grid_snapping/known_differences.html) for the
+measured tradeoffs.
 
 
 ```powershell
@@ -154,17 +154,16 @@ Arguments supported:
 | `GENFILE_OUT` | Yes | None | Path (string) | Output GEN file to create, see [Output](#output). |
 | `IDFFILE` | No* | None | Path (string) | IDF whose grid is used to snap the lines to. Equidistant and non-equidistant IDFs are supported. Not used for the grid if `WINDOW` is given. |
 | `WINDOW` | No* | `None` | Comma-separated numbers | Spatial extent as `xmin,ymin,xmax,ymax`. Requires a cell size. The grid starts at `xmin,ymin` and has as many whole cells as fit in the window; the rest of the window at the upper-right is dropped. |
-| `CELL_SIZE` | With `WINDOW` | `None` | Number (integer/float) | Cell size of the grid to snap to, in the same units as the GEN file. `CELLSIZE` is accepted as well. Not allowed with `IDFFILE` unless `WINDOW` is given. |
+| `CELL_SIZE` | With `WINDOW` | `None` | Number (integer/float) | Cell size of the grid to snap to, in the same units as the GEN file. Not allowed with `IDFFILE` unless `WINDOW` is given. |
 | `MAX_SNAP_DISTANCE` | No | `0` | Number (zero or greater) | Not part of iMOD5. Moves line vertices within this distance onto the nearest grid node before snapping. By default vertices are not moved, as in iMOD5; setting this changes which edges are selected. |
 | `I3D` | No | `0` | Integer | `0` writes 2D lines, `1` vertical walls with the top and bottom from `IDF_TOP` and `IDF_BOT`. |
-| `IDF_TOP` | With `I3D=1` | None | Path (string) | IDF with the top of the walls. Not allowed with `I3D=0`. |
-| `IDF_BOT` | With `I3D=1` | None | Path (string) | IDF with the bottom of the walls. Not allowed with `I3D=0`. |
+| `IDF_TOP` | With `I3D=1` | None | Path (string) | IDF with the top of the walls. It may have other cell sizes and extent than the grid to snap to: it is regridded to that grid with the area-weighted mean. Not allowed with `I3D=0`. |
+| `IDF_BOT` | With `I3D=1` | None | Path (string) | IDF with the bottom of the walls, regridded like `IDF_TOP`. Not allowed with `I3D=0`. |
 | `OVERWRITE` | No | `false` | Boolean | Allow overwriting an existing `GENFILE_OUT`. |
 | `LOGLEVEL` | No | `INFO` | Number (integer) or string. | The level of verbosity in the log file, choose from [`DEBUG`/`10`, `INFO`/`20`, `WARNING`/`30`, `ERROR`/`40`, `CRITICAL`/`50`] |
 
-\* Provide either `IDFFILE`, or both `WINDOW` and `CELL_SIZE`. As in iMOD5, an
-`IDFFILE` that is given together with `WINDOW` is not read for the grid, and a
-warning is logged.
+\* Provide either `IDFFILE`, or both `WINDOW` and `CELL_SIZE`. An `IDFFILE` that is
+given together with `WINDOW` is not read for the grid, and a warning is logged.
 
 ## GENPUZZLE
 
