@@ -6,17 +6,17 @@ This repository features created during the sprints for the NHI. Currently suppo
 2. Backwards compatible versions of iMOD5 batch functions (currently
    `GENSNAPTOGRID`, `GENPUZZLE` and `MKWELLIPF`), see [GEN-batch functions](#gen-batch-functions)
    and [Well batch functions](#well-batch-functions).
-2. Connect loose line segments in a GEN file into continuous segments.
+3. Connect loose line segments in a GEN file into continuous segments.
 
-##  Install
+## Install
 
 ### With pixi (recommended, requires internet connection)
 
 Note that this requires internet connection.
 
-This repository uses pixi to manage and install python environments. 
+This repository uses pixi to manage and install python environments.
 [Read how to install pixi here](https://pixi.prefix.dev/latest/installation/)
-As for now, installation requires internet access. 
+As for now, installation requires internet access.
 
 #### Some background info
 
@@ -107,9 +107,18 @@ pixi run <task name> <path of your ini file>
 ### GENSNAPTOGRID
 
 Rasterizes the lines in a GEN file onto the cell edges of a grid, so you can see
-how the lines will be applied in a model for a given cell size. This is the
-backwards compatible version of the iMOD5 function `GENSNAPTOGRID` (iMOD5 user
-manual, section 8.4.1). Only the 2D case (`I3D=0`) is supported.
+how the lines will be applied in a model for a given cell size. Edge selection
+uses xugrid's public snapping API rather than a custom port of iMOD5
+`GENSNAPTOGRID` (iMOD5 user manual, section 8.4.1). Exact iMOD5 reproduction is
+not promised: slight endpoint, tie, re-entry and nonuniform-grid differences are
+accepted in exchange for maintainability. With `I3D=1` every edge becomes a
+vertical wall with the existing adjacent-cell TOP/BOT and ring-order rules.
+
+See the [snapping module](src/snapping.py) and the reference
+[known differences report](docs/grid_snapping/known_differences.md) or
+[self-contained HTML gallery](docs/grid_snapping/known_differences.html) for the
+measured tradeoffs.
+
 
 ```powershell
 pixi run gensnaptogrid snap_gen.ini
@@ -122,7 +131,7 @@ FUNCTION=GENSNAPTOGRID
 GENFILE_IN=data\faults.gen
 GENFILE_OUT=data\faults_snapped.gen
 WINDOW=100000.0,400000.0,200000.0,425000.0
-CELLSIZE=100.0
+CELL_SIZE=100.0
 ```
 
 Or, snapping to the grid of an IDF:
@@ -142,19 +151,22 @@ Arguments supported:
 | Argument | Required | Default/Fallback | Datatype | Brief explanation |
 | --- | --- | --- | --- | --- |
 | `FUNCTION` | Yes | None | String | Must be `GENSNAPTOGRID`. |
-| `GENFILE_IN` | Yes | None | Path (string) | Input GEN file (ASCII or binary), containing 2D lines. |
-| `GENFILE_OUT` | Yes | None | Path (string) | Output GEN file to create (binary). |
-| `IDFFILE` | No* | None | Path (string) | IDF whose grid is used to snap the lines to. |
-| `WINDOW` | No* | `None` | Comma-separated numbers | Spatial extent as `xmin,ymin,xmax,ymax`. Together with `IDFFILE`, only the cells with their centre inside the window are used. |
-| `CELLSIZE` | No* | `None` | Number (integer/float) | Cell size of the grid to snap to, in the same units as the GEN file. Cannot be combined with `IDFFILE`. |
-| `MAX_SNAP_DISTANCE` | No | not used | Number (greater than zero) | Not part of iMOD5. Moves line vertices within this distance onto the nearest grid node before snapping. By default vertices are not moved, as in iMOD5; setting this changes which edges are selected. |
-| `I3D` | No | `0` | Integer | Only `0` (2D GEN) is supported. `1` (3D GEN) is rejected. |
+| `GENFILE_IN` | Yes | None | Path (string) | Input GEN file (ASCII or binary), containing 2D lines. Polygons are snapped as their outer ring. |
+| `GENFILE_OUT` | Yes | None | Path (string) | Output GEN file to create, see [Output](#output). |
+| `IDFFILE` | No* | None | Path (string) | IDF whose grid is used to snap the lines to. Equidistant and non-equidistant IDFs are supported. Not used for the grid if `WINDOW` is given. |
+| `WINDOW` | No* | `None` | Comma-separated numbers | Spatial extent as `xmin,ymin,xmax,ymax`. Requires a cell size. The grid starts at `xmin,ymin` and has as many whole cells as fit in the window; the rest of the window at the upper-right is dropped. |
+| `CELL_SIZE` | With `WINDOW` | `None` | Number (integer/float) | Cell size of the grid to snap to, in the same units as the GEN file. Not allowed with `IDFFILE` unless `WINDOW` is given. |
+| `MAX_SNAP_DISTANCE` | No | `0` | Number (zero or greater) | Not part of iMOD5. Moves line vertices within this distance onto the nearest grid node before snapping. By default vertices are not moved, as in iMOD5; setting this changes which edges are selected. |
+| `I3D` | No | `0` | Integer | `0` writes 2D lines, `1` vertical walls with the top and bottom from `IDF_TOP` and `IDF_BOT`. |
+| `IDF_TOP` | With `I3D=1` | None | Path (string) | IDF with the top of the walls. It may have other cell sizes and extent than the grid to snap to: it is regridded to that grid with the area-weighted mean. Not allowed with `I3D=0`. |
+| `IDF_BOT` | With `I3D=1` | None | Path (string) | IDF with the bottom of the walls, regridded like `IDF_TOP`. Not allowed with `I3D=0`. |
 | `OVERWRITE` | No | `false` | Boolean | Allow overwriting an existing `GENFILE_OUT`. |
 | `LOGLEVEL` | No | `INFO` | Number (integer) or string. | The level of verbosity in the log file, choose from [`DEBUG`/`10`, `INFO`/`20`, `WARNING`/`30`, `ERROR`/`40`, `CRITICAL`/`50`] |
 
-\* Provide either `IDFFILE`, or both `WINDOW` and `CELLSIZE`.
+\* Provide either `IDFFILE`, or both `WINDOW` and `CELL_SIZE`. An `IDFFILE` that is
+given together with `WINDOW` is not read for the grid, and a warning is logged.
 
-### GENPUZZLE
+## GENPUZZLE
 
 The GENPUZZLE function reads a GEN file and creates a new GEN-file in which all loose-ends are
 connected to form a continuous segment.
@@ -181,7 +193,7 @@ different:
 python genpuzzle <name of your ini file>
 ```
 
-#### Configuration
+### Configuration
 
 Keywords supported in the ini file:
 
@@ -191,7 +203,7 @@ Keywords supported in the ini file:
 | `GENFILE_IN` | Yes | None | Path (string) | Path to the input GEN file. Binary or ASCII GEN files are accepted. |
 | `GENFILE_OUT` | Yes | None | Path (string) | Path where the output GEN file will be written. |
 | `OVERWRITE` | No | `false` | Boolean | Allow overwriting an existing output GEN file. |
-| `TOLERANCE` | No | `0.001` | Number (float) | Maximum distance in map units within which line endpoints are snapped together. `0.001` matches iMOD5 tolerance.|
+| `TOLERANCE` | No | `0.001` | Number (float) | Maximum distance in map units within which line endpoints are snapped together. `0.001` matches iMOD5 tolerance. |
 
 ## Well batch functions
 

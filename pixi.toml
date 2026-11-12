@@ -8,6 +8,7 @@ version = "0.1.0"
 [tasks]
 convert = { cmd="python -m src.cli convert", description="Convert iMOD5 data to MODFLOW 6 and MetaSwap model." }
 gensnaptogrid = { cmd="python -m src.cli gensnaptogrid", description="Snap GEN line features to the edges of a structured grid." }
+compare-grid-snapping = { cmd="python -m docs.grid_snapping.compare", description="Compare actual iMOD5 output with this repository and rebuild docs/grid_snapping." }
 genpuzzle = {cmd = "python -m src.cli genpuzzle", description = "Create a GEN file, where all loose ends are connected to form a continuous segment"}
 mkwellipf = { cmd="python -m src.cli mkwellipf", description="Spread the pumping rate of wells in IPF files over the model layers." }
 
