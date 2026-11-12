@@ -21,7 +21,7 @@ def open_idf_grid(path: Path | str) -> xr.DataArray:
         if da.sizes[dim] != 1:
             raise ValueError(
                 f"{path} holds {da.sizes[dim]} values along {dim!r}; "
-                "a single grid (one layer, no time) is required."
+                "a single grid (max one layer, max one timestep) is required."
             )
     if extra:
         da = da.squeeze(extra, drop=True)
