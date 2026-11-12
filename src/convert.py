@@ -200,6 +200,28 @@ def make_simulation(
     )
 
 
+def dump_simulation_to_netcdf(
+    simulation: MetaMod | Modflow6Simulation, dump_dir: Path
+) -> None:
+    """
+    Dump the MODFLOW 6 simulation, and the MetaSwap model if coupled, to NetCDF
+    files. MODFLOW 6 ends up in ``dump_dir/modflow6``, MetaSwap in
+    ``dump_dir/metaswap``.
+    """
+    if isinstance(simulation, MetaMod):
+        mf6_simulation = simulation.mf6_simulation
+        msw_model = simulation.msw_model
+    else:
+        mf6_simulation = simulation
+        msw_model = None
+
+    imod_logger.info(f"Writing MODFLOW 6 simulation to NetCDF format at {dump_dir / 'modflow6'}")
+    mf6_simulation.dump(dump_dir / "modflow6")
+    if msw_model is not None:
+        imod_logger.info(f"Writing MetaSwap model to NetCDF format at {dump_dir / 'metaswap'}")
+        msw_model.dump(dump_dir / "metaswap")
+
+
 def convert_model(settings: ConvertSettings):
     # Generate list of times for simulation
     times = settings.simulation_times()
@@ -225,16 +247,14 @@ def convert_model(settings: ConvertSettings):
         target_grid=target_grid,
         model_name=settings.model_name,
     )
+    # Determine before out_dir gets a "modflow6" subdirectory appended below.
+    netcdf_dump_dir = settings.out_dir.with_name(f"{settings.out_dir.name}_netcdf")
     if isinstance(simulation, Modflow6Simulation):
         write_kwargs = {"binary": False}
         # Modify out_dir to point to a modflow6 subdirectory
         # so that it is consistent to what primod writes.
         settings.out_dir = settings.out_dir / "modflow6"
         settings.out_dir.mkdir(parents=True, exist_ok=True)
-        if settings.dump_netcdf:
-            netcdf_dump_dir = settings.out_dir.with_name(f"{settings.out_dir.name}_netcdf")
-            imod_logger.info(f"Writing Modflow6 simulation to NetCDF format at {netcdf_dump_dir}")
-            simulation.dump(netcdf_dump_dir)
     else:
         write_kwargs = {
             "modflow6_dll": settings.bin_dir / "modflow6" / "libmf6.dll",
@@ -242,6 +262,8 @@ def convert_model(settings: ConvertSettings):
             "metaswap_dll_dependency": settings.bin_dir / "metaswap",
             "modflow6_write_kwargs": {"binary": False},
         }
+    if settings.dump_netcdf:
+        dump_simulation_to_netcdf(simulation, netcdf_dump_dir)
     # Write coupling to disk
     simulation.write(settings.out_dir, **write_kwargs)
     # Run coupled simulation
