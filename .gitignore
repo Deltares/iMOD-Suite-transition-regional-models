@@ -10,3 +10,4 @@ _scratch/*
 # Compiled Python files
 __pycache__/
 *.pyc
+.rattler-cache/
