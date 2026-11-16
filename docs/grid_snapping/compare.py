@@ -20,6 +20,7 @@ from src.grid_helpers import (
 )
 from src.snapping import snap_gen_to_grid
 from tests import test_snapping_imod5 as imod5_tests
+from tests.imod5_utils import IMOD5_EXE
 
 HERE = Path(__file__).resolve().parent
 
@@ -93,9 +94,9 @@ def main(argv=None):
         help="Create the separate one-off raw xugrid comparison, not the repository report.",
     )
     options = parser.parse_args(argv)
-    if not imod5_tests.IMOD5_EXE.is_file():
+    if not IMOD5_EXE.is_file():
         raise FileNotFoundError(
-            f"iMOD5 executable not found: {imod5_tests.IMOD5_EXE}. Set IMOD5_EXE to its path."
+            f"iMOD5 executable not found: {IMOD5_EXE}. Set IMOD5_EXE to its path."
         )
     records = []
     with tempfile.TemporaryDirectory(prefix="grid-snapping-") as work:
@@ -150,7 +151,7 @@ def main(argv=None):
             ))
     metadata = {
         "reference": "Actual iMOD5 executable (GENSNAPTOGRID)",
-        "executable": str(imod5_tests.IMOD5_EXE),
+        "executable": str(IMOD5_EXE),
         "python": platform.python_version(),
         **{package: importlib.metadata.version(package) for package in ("xugrid", "imod")},
     }
