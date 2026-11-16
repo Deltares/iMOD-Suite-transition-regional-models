@@ -25,13 +25,11 @@ historical data. The cases reuse the executable integration tests.
 
 - [Repository comparison](known_differences.md)
 - [Repository HTML gallery](known_differences.html)
-- [One-off default-xugrid comparison](default_xugrid/known_differences.md)
-- [One-off default-xugrid HTML gallery](default_xugrid/known_differences.html)
 
-The separate default-xugrid snapshot was generated once with:
+To visualize the difference between a default xugrid implementation (i.e. just running `xu.create_snap_to_grid_dataframe` instead of using the functions in the `snapping.py`), and IMOD, you can pass the flag `default-xugrid` to the pixi task.
 
 ```powershell
-pixi run python -m docs.grid_snapping.compare --default-xugrid
+pixi run compare-grid-snapping --default-xugrid
 ```
 
 It uses `max_snap_distance=0.0` and xugrid's default tolerance, without the
